@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: Pictogrammers Material Design Icons 7.4.47, circle-outline. Apache-2.0. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M256 427Q210 427 170.5 404.0Q131 381 108.0 341.5Q85 302 85.0 256.0Q85 210 108.0 170.5Q131 131 170.5 108.0Q210 85 256.0 85.0Q302 85 341.5 108.0Q381 131 404.0 170.5Q427 210 427.0 256.0Q427 302 404.0 341.5Q381 381 341.5 404.0Q302 427 256 427ZM256 43Q214 43 174.5 59.0Q135 75 105.0 105.0Q75 135 59.0 174.5Q43 214 43.0 256.0Q43 298 59.0 337.5Q75 377 105.0 407.0Q135 437 174.5 453.0Q214 469 256.0 469.0Q298 469 337.5 453.0Q377 437 407.0 407.0Q437 377 453.0 337.5Q469 298 469.0 256.0Q469 214 453.0 174.5Q437 135 407.0 105.0Q377 75 337.5 59.0Q298 43 256 43Z" />
+</vector>

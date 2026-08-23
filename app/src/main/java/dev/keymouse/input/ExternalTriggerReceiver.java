@@ -8,10 +8,8 @@ import dev.keymouse.core.MouseAction;
 import dev.keymouse.service.MouseAccessibilityService;
 
 /**
- * Public Intent surface for Key Mapper/Tasker/Automate/ADB.
- *
- * action = dev.keymouse.input.DOWN / UP / PULSE
- * string extra "key" = MouseAction enum name, e.g. MOVE_LEFT or CURSOR_TOGGLE.
+ * Public Intent surface for Key Mapper / Tasker / Automate / ADB.
+ * Generic actions use string extra "key" with a MouseAction enum name.
  */
 public final class ExternalTriggerReceiver extends BroadcastReceiver {
     public static final String EXTRA_KEY = "key";
@@ -23,13 +21,12 @@ public final class ExternalTriggerReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         if (action == null) return;
 
-        // Zero-configuration aliases are convenient in Key Mapper: only the
-        // broadcast action and explicit receiver component are needed.
-        if ("dev.keymouse.action.CURSOR_TOGGLE".equals(action)) { service.externalPulse(MouseAction.CURSOR_TOGGLE); return; }
-        if ("dev.keymouse.action.TOUCH_TOGGLE".equals(action)) { service.externalPulse(MouseAction.TOUCH_MODE); return; }
+        if ("dev.keymouse.action.TRIGGER_SHORT".equals(action)) { service.externalTriggerShort(); return; }
+        if ("dev.keymouse.action.TRIGGER_LONG".equals(action)) { service.externalTriggerLong(); return; }
+        if ("dev.keymouse.action.TRIGGER_DOWN".equals(action)) { service.externalDown(MouseAction.TRIGGER); return; }
+        if ("dev.keymouse.action.TRIGGER_UP".equals(action)) { service.externalUp(MouseAction.TRIGGER); return; }
         if ("dev.keymouse.action.LEFT_DOWN".equals(action)) { service.externalDown(MouseAction.LEFT_BUTTON); return; }
         if ("dev.keymouse.action.LEFT_UP".equals(action)) { service.externalUp(MouseAction.LEFT_BUTTON); return; }
-        if ("dev.keymouse.action.RIGHT_CLICK".equals(action)) { service.externalPulse(MouseAction.RIGHT_BUTTON); return; }
         if (action.startsWith("dev.keymouse.action.MOVE_")) {
             try {
                 service.externalPulse(MouseAction.valueOf(action.substring("dev.keymouse.action.".length())));

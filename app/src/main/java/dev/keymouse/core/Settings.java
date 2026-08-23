@@ -5,7 +5,9 @@ import android.content.SharedPreferences;
 import android.view.KeyEvent;
 
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 public final class Settings {
     private static final String PREFS = "keymouse";
@@ -13,6 +15,7 @@ public final class Settings {
     private static final String PREFIX_SCAN = "binding.scan.";
     private static final String CAPTURE_KEYS = "capture_keys";
     private static final String CURSOR_STYLE = "cursor_style";
+    private static final String CURSOR_ENABLED = "cursor_enabled";
     private static final String SPEED = "speed";
 
     private final SharedPreferences prefs;
@@ -23,34 +26,57 @@ public final class Settings {
     }
 
     private void ensureDefaults() {
-        if (prefs.contains(PREFIX_KEY + MouseAction.MOVE_UP.name())) return;
         SharedPreferences.Editor e = prefs.edit();
-        putDefault(e, MouseAction.MOVE_UP, KeyEvent.KEYCODE_DPAD_UP);
-        putDefault(e, MouseAction.MOVE_RIGHT, KeyEvent.KEYCODE_DPAD_RIGHT);
-        putDefault(e, MouseAction.MOVE_DOWN, KeyEvent.KEYCODE_DPAD_DOWN);
-        putDefault(e, MouseAction.MOVE_LEFT, KeyEvent.KEYCODE_DPAD_LEFT);
-        putDefault(e, MouseAction.LEFT_BUTTON, KeyEvent.KEYCODE_DPAD_CENTER);
+        boolean changed = false;
         for (MouseAction action : MouseAction.values()) {
-            if (!prefs.contains(PREFIX_KEY + action.name()) &&
-                    action != MouseAction.MOVE_UP && action != MouseAction.MOVE_RIGHT &&
-                    action != MouseAction.MOVE_DOWN && action != MouseAction.MOVE_LEFT &&
-                    action != MouseAction.LEFT_BUTTON) {
-                e.putInt(PREFIX_KEY + action.name(), -1);
-                e.putInt(PREFIX_SCAN + action.name(), 0);
+            String keyName = PREFIX_KEY + action.name();
+            String scanName = PREFIX_SCAN + action.name();
+            if (!prefs.contains(keyName)) {
+                e.putInt(keyName, defaultKeyCode(action));
+                changed = true;
+            }
+            if (!prefs.contains(scanName)) {
+                e.putInt(scanName, 0);
+                changed = true;
             }
         }
-        e.apply();
+        if (!prefs.contains(CURSOR_STYLE)) {
+            e.putString(CURSOR_STYLE, CursorStyle.ARROW.id);
+            changed = true;
+        }
+        if (!prefs.contains(CURSOR_ENABLED)) {
+            LinkedHashSet<String> all = new LinkedHashSet<>();
+            for (CursorStyle style : CursorStyle.values()) all.add(style.id);
+            e.putStringSet(CURSOR_ENABLED, all);
+            changed = true;
+        }
+        if (changed) e.apply();
+        repairCursorSelection();
     }
 
-    private static void putDefault(SharedPreferences.Editor e, MouseAction action, int keyCode) {
-        e.putInt(PREFIX_KEY + action.name(), keyCode);
-        e.putInt(PREFIX_SCAN + action.name(), 0);
+    public static int defaultKeyCode(MouseAction action) {
+        switch (action) {
+            case MOVE_UP: return KeyEvent.KEYCODE_DPAD_UP;
+            case MOVE_RIGHT: return KeyEvent.KEYCODE_DPAD_RIGHT;
+            case MOVE_DOWN: return KeyEvent.KEYCODE_DPAD_DOWN;
+            case MOVE_LEFT: return KeyEvent.KEYCODE_DPAD_LEFT;
+            case LEFT_BUTTON: return KeyEvent.KEYCODE_DPAD_CENTER;
+            default: return -1;
+        }
     }
 
     public Binding getBinding(MouseAction action) {
         return new Binding(
-                prefs.getInt(PREFIX_KEY + action.name(), -1),
+                prefs.getInt(PREFIX_KEY + action.name(), defaultKeyCode(action)),
                 prefs.getInt(PREFIX_SCAN + action.name(), 0));
+    }
+
+    public BindingState bindingState(MouseAction action) {
+        Binding binding = getBinding(action);
+        if (!binding.isBound()) return BindingState.NONE;
+        int defaultCode = defaultKeyCode(action);
+        if (defaultCode >= 0 && binding.keyCode == defaultCode) return BindingState.DEFAULT;
+        return BindingState.CUSTOM;
     }
 
     public void setBinding(MouseAction action, int keyCode, int scanCode) {
@@ -62,6 +88,10 @@ public final class Settings {
 
     public void clearBinding(MouseAction action) {
         setBinding(action, -1, 0);
+    }
+
+    public void resetBinding(MouseAction action) {
+        setBinding(action, defaultKeyCode(action), 0);
     }
 
     public Map<MouseAction, Binding> allBindings() {
@@ -78,12 +108,77 @@ public final class Settings {
         prefs.edit().putBoolean(CAPTURE_KEYS, value).apply();
     }
 
-    public String cursorStyle() {
-        return prefs.getString(CURSOR_STYLE, "CROSSHAIR");
+    public CursorStyle cursorStyle() {
+        return CursorStyle.fromId(prefs.getString(CURSOR_STYLE, CursorStyle.ARROW.id));
     }
 
-    public void setCursorStyle(String value) {
-        prefs.edit().putString(CURSOR_STYLE, value).apply();
+    public void setCursorStyle(CursorStyle value) {
+        Set<String> enabled = enabledCursorStyleIds();
+        if (!enabled.contains(value.id)) {
+            enabled.add(value.id);
+            prefs.edit().putStringSet(CURSOR_ENABLED, enabled).apply();
+        }
+        prefs.edit().putString(CURSOR_STYLE, value.id).apply();
+    }
+
+    public Set<String> enabledCursorStyleIds() {
+        Set<String> stored = prefs.getStringSet(CURSOR_ENABLED, null);
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (stored != null) result.addAll(stored);
+        if (result.isEmpty()) result.add(CursorStyle.ARROW.id);
+        return result;
+    }
+
+    public boolean isCursorStyleEnabled(CursorStyle style) {
+        return enabledCursorStyleIds().contains(style.id);
+    }
+
+    public void setCursorStyleEnabled(CursorStyle style, boolean enabled) {
+        LinkedHashSet<String> values = new LinkedHashSet<>(enabledCursorStyleIds());
+        if (enabled) {
+            values.add(style.id);
+        } else {
+            if (values.size() <= 1 && values.contains(style.id)) return;
+            values.remove(style.id);
+        }
+        SharedPreferences.Editor e = prefs.edit().putStringSet(CURSOR_ENABLED, values);
+        if (!values.contains(cursorStyle().id)) {
+            for (CursorStyle candidate : CursorStyle.values()) {
+                if (values.contains(candidate.id)) {
+                    e.putString(CURSOR_STYLE, candidate.id);
+                    break;
+                }
+            }
+        }
+        e.apply();
+    }
+
+    public CursorStyle cycleCursorStyle() {
+        Set<String> enabled = enabledCursorStyleIds();
+        CursorStyle current = cursorStyle();
+        CursorStyle[] all = CursorStyle.values();
+        int currentIndex = 0;
+        for (int i = 0; i < all.length; i++) if (all[i] == current) currentIndex = i;
+        for (int offset = 1; offset <= all.length; offset++) {
+            CursorStyle next = all[(currentIndex + offset) % all.length];
+            if (enabled.contains(next.id)) {
+                setCursorStyle(next);
+                return next;
+            }
+        }
+        return current;
+    }
+
+    private void repairCursorSelection() {
+        Set<String> enabled = enabledCursorStyleIds();
+        CursorStyle selected = cursorStyle();
+        if (enabled.contains(selected.id)) return;
+        for (CursorStyle style : CursorStyle.values()) {
+            if (enabled.contains(style.id)) {
+                prefs.edit().putString(CURSOR_STYLE, style.id).apply();
+                return;
+            }
+        }
     }
 
     public int speedPxPerTick() {

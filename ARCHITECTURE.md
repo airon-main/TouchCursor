@@ -1,7 +1,24 @@
 # Architecture
 
-`KeyEvent / Intent -> MouseAction -> pressed-action state -> PointerController -> CursorOverlay + ContinuousTouchController`
+```text
+hardware KeyEvent / external Intent
+            ↓
+         MouseAction
+            ↓
+   MouseAccessibilityService
+      ↙               ↘
+trigger state       pressed directions
+      ↓                    ↓
+             PointerController
+              ↙          ↘
+        CursorOverlay   ContinuousTouchController
+```
 
-The important invariant is that a held touch is represented by one logical pointer. `ContinuousTouchController` starts a `StrokeDescription(..., willContinue=true)` and advances it with `continueStroke()`. Releasing creates the final continuation with `willContinue=false`.
+The cursor starts hidden. The trigger key is the only binding consumed while hidden:
 
-No component generates a loop of independent swipe gestures for scrolling.
+- long press toggles cursor visibility;
+- short press while visible toggles Normal / Scroll.
+
+When hidden, movement/click key events are returned to Android instead of being swallowed.
+
+A held synthetic touch is one logical pointer. `ContinuousTouchController` starts a `StrokeDescription(..., willContinue=true)` and advances it with `continueStroke()`. Releasing creates the final continuation with `willContinue=false`. Scroll mode never loops independent swipe gestures.

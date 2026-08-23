@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.EnumSet;
@@ -26,6 +27,17 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private Map<MouseAction, Binding> bindings;
     private boolean tickerRunning;
     private boolean calibrationMode;
+    private boolean triggerHeld;
+    private boolean triggerLongFired;
+
+    private final Runnable triggerLongPress = new Runnable() {
+        @Override
+        public void run() {
+            if (!triggerHeld || pointer == null) return;
+            triggerLongFired = true;
+            toggleMouseVisibility();
+        }
+    };
 
     public static MouseAccessibilityService getRunningInstance() {
         return runningInstance;
@@ -43,21 +55,19 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // No view-tree scraping is needed. This service only provides input + overlay.
+        // No view-tree scraping: Accessibility is used only for gestures and optional key input.
     }
 
     @Override
     public void onInterrupt() {
-        pressed.clear();
-        stopTicker();
-        if (pointer != null) pointer.leftUp();
+        resetInputState();
+        if (pointer != null) pointer.hide();
     }
 
     @Override
     public void onDestroy() {
         runningInstance = null;
-        pressed.clear();
-        stopTicker();
+        resetInputState();
         if (pointer != null) pointer.destroy();
         pointer = null;
         super.onDestroy();
@@ -68,6 +78,15 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (settings == null || !settings.captureHardwareKeys()) return false;
         MouseAction action = findAction(event);
         if (action == null) return false;
+
+        if (action == MouseAction.TRIGGER) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) actionDown(action);
+            else if (event.getAction() == KeyEvent.ACTION_UP) actionUp(action);
+            return true;
+        }
+
+        // Hidden mouse means the keypad remains a normal Android keypad.
+        if (pointer == null || !pointer.isVisible()) return false;
 
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (event.getRepeatCount() == 0) actionDown(action);
@@ -87,14 +106,26 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     public void externalPulse(MouseAction action) {
         main.post(() -> {
-            if (action.movement) {
-                float speed = settings == null ? 10 : settings.speedPxPerTick();
-                moveForActions(EnumSet.of(action), speed);
-            } else {
+            if (action == MouseAction.TRIGGER) {
+                triggerShort();
+            } else if (action.movement) {
+                if (pointer != null && pointer.isVisible()) {
+                    float speed = settings == null ? 10 : settings.speedPxPerTick();
+                    moveForActions(EnumSet.of(action), speed);
+                }
+            } else if (action == MouseAction.LEFT_BUTTON) {
                 actionDown(action);
-                if (action == MouseAction.LEFT_BUTTON) actionUp(action);
+                actionUp(action);
             }
         });
+    }
+
+    public void externalTriggerShort() {
+        main.post(this::triggerShort);
+    }
+
+    public void externalTriggerLong() {
+        main.post(this::toggleMouseVisibility);
     }
 
     public void setCalibrationMode(boolean enabled) {
@@ -123,37 +154,50 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     private void actionDown(MouseAction action) {
         if (pointer == null) return;
+        if (action == MouseAction.TRIGGER) {
+            if (triggerHeld) return;
+            triggerHeld = true;
+            triggerLongFired = false;
+            main.postDelayed(triggerLongPress, ViewConfiguration.getLongPressTimeout());
+            return;
+        }
+        if (!pointer.isVisible()) return;
         if (action.movement) {
             if (pressed.add(action)) startTicker();
             return;
         }
-
-        switch (action) {
-            case LEFT_BUTTON:
-                pointer.leftDown();
-                break;
-            case RIGHT_BUTTON:
-                pointer.contextClick();
-                break;
-            case TOUCH_MODE:
-                pointer.toggleTouchMode();
-                break;
-            case CURSOR_TOGGLE:
-                pointer.toggleCursor();
-                break;
-            default:
-                break;
-        }
+        if (action == MouseAction.LEFT_BUTTON) pointer.leftDown();
     }
 
     private void actionUp(MouseAction action) {
         if (pointer == null) return;
+        if (action == MouseAction.TRIGGER) {
+            if (!triggerHeld) return;
+            triggerHeld = false;
+            main.removeCallbacks(triggerLongPress);
+            if (!triggerLongFired) triggerShort();
+            triggerLongFired = false;
+            return;
+        }
         if (action.movement) {
             pressed.remove(action);
             if (!hasMovementPressed()) stopTicker();
             return;
         }
         if (action == MouseAction.LEFT_BUTTON) pointer.leftUp();
+    }
+
+    private void triggerShort() {
+        if (pointer != null && pointer.isVisible()) pointer.toggleScrollMode();
+    }
+
+    private void toggleMouseVisibility() {
+        if (pointer == null) return;
+        if (pointer.isVisible()) {
+            pressed.clear();
+            stopTicker();
+        }
+        pointer.toggleVisibility();
     }
 
     private void startTicker() {
@@ -175,7 +219,10 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private final Runnable moveTick = new Runnable() {
         @Override
         public void run() {
-            if (!tickerRunning || pointer == null) return;
+            if (!tickerRunning || pointer == null || !pointer.isVisible()) {
+                stopTicker();
+                return;
+            }
             float speed = settings == null ? 10 : settings.speedPxPerTick();
             moveForActions(pressed, speed);
             main.postDelayed(this, TICK_MS);
@@ -190,11 +237,19 @@ public final class MouseAccessibilityService extends AccessibilityService {
             vx += action.dx;
             vy += action.dy;
         }
-        if (vx == 0 && vy == 0) return;
+        if (vx == 0 && vy == 0 || pointer == null) return;
         vx = Integer.signum(vx);
         vy = Integer.signum(vy);
         float scale = (vx != 0 && vy != 0) ? 0.70710678f : 1f;
         pointer.move(vx * speed * scale, vy * speed * scale);
+    }
+
+    private void resetInputState() {
+        pressed.clear();
+        stopTicker();
+        triggerHeld = false;
+        triggerLongFired = false;
+        main.removeCallbacks(triggerLongPress);
     }
 
     private void applyKeyCaptureFlag() {
@@ -205,8 +260,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
         } else {
             info.flags &= ~AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
-            pressed.clear();
-            stopTicker();
+            resetInputState();
         }
         setServiceInfo(info);
     }

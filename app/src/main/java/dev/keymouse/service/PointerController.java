@@ -1,38 +1,34 @@
 package dev.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
-import android.accessibilityservice.GestureDescription;
-import android.graphics.Path;
-import android.os.Handler;
-import android.os.Looper;
+
+import dev.keymouse.core.CursorStyle;
 
 public final class PointerController {
-    private final AccessibilityService service;
     private final CursorOverlay overlay;
     private final ContinuousTouchController touch;
-    private final Handler main = new Handler(Looper.getMainLooper());
 
     private boolean leftHeld;
-    private boolean touchMode;
+    private boolean scrollMode;
 
-    public PointerController(AccessibilityService service, String cursorStyle) {
-        this.service = service;
+    public PointerController(AccessibilityService service, CursorStyle cursorStyle) {
         overlay = new CursorOverlay(service, cursorStyle);
         touch = new ContinuousTouchController(service);
     }
 
     public void destroy() {
-        touch.release();
+        hide();
         overlay.destroy();
     }
 
     public void move(float dx, float dy) {
+        if (!overlay.isVisible()) return;
         overlay.moveBy(dx, dy);
-        if (leftHeld || touchMode) touch.moveTo(overlay.x(), overlay.y());
+        if (leftHeld || scrollMode) touch.moveTo(overlay.x(), overlay.y());
     }
 
     public void leftDown() {
-        if (leftHeld) return;
+        if (!overlay.isVisible() || leftHeld) return;
         leftHeld = true;
         syncTouchState();
     }
@@ -43,35 +39,47 @@ public final class PointerController {
         syncTouchState();
     }
 
-    public void toggleTouchMode() {
-        touchMode = !touchMode;
+    public void toggleScrollMode() {
+        if (!overlay.isVisible()) return;
+        scrollMode = !scrollMode;
+        overlay.setScrollMode(scrollMode);
         syncTouchState();
     }
 
-    public void contextClick() {
-        if (leftHeld || touchMode) return;
-        Path path = new Path();
-        path.moveTo(overlay.x(), overlay.y());
-        GestureDescription.StrokeDescription stroke =
-                new GestureDescription.StrokeDescription(path, 0, 550);
-        service.dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(), null, main);
+    public void show() {
+        if (overlay.isVisible()) return;
+        scrollMode = false;
+        leftHeld = false;
+        overlay.setScrollMode(false);
+        overlay.setVisible(true);
     }
 
-    public void toggleCursor() {
-        overlay.setVisible(!overlay.isVisible());
+    public void hide() {
+        leftHeld = false;
+        scrollMode = false;
+        overlay.setScrollMode(false);
+        if (touch.isRequestedDown()) touch.release();
+        overlay.setVisible(false);
     }
 
-    public void setCursorStyle(String style) {
+    public void toggleVisibility() {
+        if (overlay.isVisible()) hide(); else show();
+    }
+
+    public boolean isVisible() {
+        return overlay.isVisible();
+    }
+
+    public void setCursorStyle(CursorStyle style) {
         overlay.setStyle(style);
     }
 
-    public boolean isTouchMode() {
-        return touchMode;
+    public boolean isScrollMode() {
+        return scrollMode;
     }
 
     private void syncTouchState() {
-        boolean shouldHold = leftHeld || touchMode;
-        overlay.setTouchActive(shouldHold);
+        boolean shouldHold = overlay.isVisible() && (leftHeld || scrollMode);
         if (shouldHold && !touch.isRequestedDown()) {
             touch.press(overlay.x(), overlay.y());
         } else if (!shouldHold && touch.isRequestedDown()) {

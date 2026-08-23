@@ -2,34 +2,47 @@ package dev.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Path;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
-import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+
+import dev.keymouse.core.CursorStyle;
 
 public final class CursorOverlay {
     private static final int SIZE_DP = 42;
 
     private final AccessibilityService service;
     private final WindowManager wm;
-    private final CursorView view;
+    private final FrameLayout view;
+    private final ImageView shadow;
+    private final ImageView foreground;
     private final WindowManager.LayoutParams params;
     private int screenWidth;
     private int screenHeight;
     private float x;
     private float y;
-    private boolean visible = true;
+    private boolean visible;
+    private boolean added;
+    private CursorStyle style;
 
-    public CursorOverlay(AccessibilityService service, String style) {
+    public CursorOverlay(AccessibilityService service, CursorStyle style) {
         this.service = service;
         this.wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
-        this.view = new CursorView(service);
-        this.view.setStyle(style);
+        this.view = new FrameLayout(service);
+        this.shadow = image(service);
+        this.foreground = image(service);
+        shadow.setScaleX(1.13f);
+        shadow.setScaleY(1.13f);
+        shadow.setColorFilter(Color.BLACK);
+        foreground.setColorFilter(Color.WHITE);
+        view.addView(shadow, new FrameLayout.LayoutParams(-1, -1));
+        view.addView(foreground, new FrameLayout.LayoutParams(-1, -1));
+
         int size = dp(SIZE_DP);
         this.params = new WindowManager.LayoutParams(
                 size,
@@ -40,18 +53,24 @@ public final class CursorOverlay {
                         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.LEFT;
+
         updateScreenBounds();
         x = screenWidth / 2f;
         y = screenHeight / 2f;
-        syncParams();
+        setStyle(style);
+        updateLayoutPosition();
+        view.setVisibility(View.GONE);
         wm.addView(view, params);
+        added = true;
     }
 
     public void destroy() {
+        if (!added) return;
         try {
             wm.removeView(view);
         } catch (RuntimeException ignored) {
         }
+        added = false;
     }
 
     public void updateScreenBounds() {
@@ -65,24 +84,20 @@ public final class CursorOverlay {
         updateScreenBounds();
         x = clamp(x + dx, 0, screenWidth - 1);
         y = clamp(y + dy, 0, screenHeight - 1);
-        syncParams();
-    }
-
-    private void syncParams() {
-        int half = params.width / 2;
-        params.x = Math.round(x) - half;
-        params.y = Math.round(y) - half;
-        if (visible) {
-            try {
-                wm.updateViewLayout(view, params);
-            } catch (RuntimeException ignored) {
-            }
-        }
+        updateLayoutPosition();
+        applyLayout();
     }
 
     public void setVisible(boolean value) {
         visible = value;
         view.setVisibility(value ? View.VISIBLE : View.GONE);
+        if (value) {
+            updateScreenBounds();
+            x = clamp(x, 0, screenWidth - 1);
+            y = clamp(y, 0, screenHeight - 1);
+            updateLayoutPosition();
+            applyLayout();
+        }
     }
 
     public boolean isVisible() {
@@ -92,105 +107,48 @@ public final class CursorOverlay {
     public float x() { return x; }
     public float y() { return y; }
 
-    public void setStyle(String style) {
-        view.setStyle(style);
+    public void setStyle(CursorStyle style) {
+        this.style = style == null ? CursorStyle.ARROW : style;
+        shadow.setImageResource(this.style.drawableRes);
+        foreground.setImageResource(this.style.drawableRes);
+        updateLayoutPosition();
+        applyLayout();
     }
 
-    public void setTouchActive(boolean active) {
-        view.setTouchActive(active);
+    public void setScrollMode(boolean scrollMode) {
+        foreground.setColorFilter(scrollMode ? 0xffffc107 : Color.WHITE);
+    }
+
+    private void updateLayoutPosition() {
+        CursorStyle resolved = style == null ? CursorStyle.ARROW : style;
+        params.x = Math.round(x - params.width * resolved.hotspotX);
+        params.y = Math.round(y - params.height * resolved.hotspotY);
+    }
+
+    private void applyLayout() {
+        if (!added) return;
+        try {
+            wm.updateViewLayout(view, params);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private static ImageView image(Context context) {
+        ImageView result = new ImageView(context);
+        result.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        result.setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 2));
+        return result;
     }
 
     private int dp(int value) {
-        return Math.round(value * service.getResources().getDisplayMetrics().density);
+        return dp(service, value);
+    }
+
+    private static int dp(Context context, int value) {
+        return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
-    }
-
-    private static final class CursorView extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private String style = "CROSSHAIR";
-        private boolean touchActive;
-
-        CursorView(Context context) {
-            super(context);
-            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(context, 2.4f));
-            paint.setColor(0xffffffff);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            shadow.setStyle(Paint.Style.STROKE);
-            shadow.setStrokeWidth(dp(context, 4.5f));
-            shadow.setColor(0xff111111);
-            shadow.setStrokeCap(Paint.Cap.ROUND);
-        }
-
-        void setStyle(String style) {
-            this.style = style == null ? "CROSSHAIR" : style;
-            invalidate();
-        }
-
-        void setTouchActive(boolean active) {
-            touchActive = active;
-            invalidate();
-        }
-
-        @Override
-        protected void onDraw(Canvas c) {
-            super.onDraw(c);
-            float cx = getWidth() / 2f;
-            float cy = getHeight() / 2f;
-            float r = Math.min(getWidth(), getHeight()) * 0.28f;
-            drawShape(c, shadow, cx, cy, r);
-            drawShape(c, paint, cx, cy, r);
-            if (touchActive) {
-                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-                p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(dp(getContext(), 2f));
-                p.setColor(0xffffffff);
-                c.drawCircle(cx, cy, r * 1.35f, p);
-            }
-        }
-
-        private void drawShape(Canvas c, Paint p, float cx, float cy, float r) {
-            switch (style) {
-                case "ARROW":
-                    Path arrow = new Path();
-                    arrow.moveTo(cx - r * 0.65f, cy - r);
-                    arrow.lineTo(cx + r * 0.55f, cy + r * 0.15f);
-                    arrow.lineTo(cx + r * 0.05f, cy + r * 0.15f);
-                    arrow.lineTo(cx + r * 0.55f, cy + r);
-                    arrow.moveTo(cx + r * 0.05f, cy + r * 0.15f);
-                    arrow.lineTo(cx - r * 0.65f, cy - r);
-                    c.drawPath(arrow, p);
-                    break;
-                case "DOT":
-                    Paint fill = new Paint(p);
-                    fill.setStyle(Paint.Style.FILL);
-                    c.drawCircle(cx, cy, r * 0.42f, fill);
-                    break;
-                case "RING":
-                    c.drawCircle(cx, cy, r * 0.75f, p);
-                    break;
-                case "PLUS":
-                    c.drawLine(cx - r, cy, cx + r, cy, p);
-                    c.drawLine(cx, cy - r, cx, cy + r, p);
-                    break;
-                case "CROSSHAIR":
-                default:
-                    c.drawCircle(cx, cy, r * 0.72f, p);
-                    c.drawLine(cx - r, cy, cx - r * 0.3f, cy, p);
-                    c.drawLine(cx + r * 0.3f, cy, cx + r, cy, p);
-                    c.drawLine(cx, cy - r, cx, cy - r * 0.3f, p);
-                    c.drawLine(cx, cy + r * 0.3f, cx, cy + r, p);
-                    break;
-            }
-        }
-
-        private static float dp(Context c, float v) {
-            return v * c.getResources().getDisplayMetrics().density;
-        }
     }
 }

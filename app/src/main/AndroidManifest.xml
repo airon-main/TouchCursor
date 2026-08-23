@@ -36,11 +36,12 @@
                 <action android:name="dev.keymouse.input.DOWN" />
                 <action android:name="dev.keymouse.input.UP" />
                 <action android:name="dev.keymouse.input.PULSE" />
-                <action android:name="dev.keymouse.action.CURSOR_TOGGLE" />
-                <action android:name="dev.keymouse.action.TOUCH_TOGGLE" />
+                <action android:name="dev.keymouse.action.TRIGGER_SHORT" />
+                <action android:name="dev.keymouse.action.TRIGGER_LONG" />
+                <action android:name="dev.keymouse.action.TRIGGER_DOWN" />
+                <action android:name="dev.keymouse.action.TRIGGER_UP" />
                 <action android:name="dev.keymouse.action.LEFT_DOWN" />
                 <action android:name="dev.keymouse.action.LEFT_UP" />
-                <action android:name="dev.keymouse.action.RIGHT_CLICK" />
                 <action android:name="dev.keymouse.action.MOVE_UP" />
                 <action android:name="dev.keymouse.action.MOVE_UP_RIGHT" />
                 <action android:name="dev.keymouse.action.MOVE_RIGHT" />

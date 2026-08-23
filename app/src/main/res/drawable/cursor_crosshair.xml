@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: Pictogrammers Material Design Icons 7.4.47, crosshairs. Apache-2.0. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M65 277H21V235H65Q70 191 93.5 154.0Q117 117 154.0 93.5Q191 70 235 65V21H277V65Q321 70 358.0 93.5Q395 117 418.5 154.0Q442 191 447 235H491V277H447Q442 321 418.5 358.0Q395 395 358.0 418.5Q321 442 277 447V491H235V447Q191 442 154.0 418.5Q117 395 93.5 358.0Q70 321 65 277ZM256 107Q215 107 181.0 127.0Q147 147 127.0 181.0Q107 215 107.0 256.0Q107 297 127.0 331.0Q147 365 181.0 385.0Q215 405 256.0 405.0Q297 405 331.0 385.0Q365 365 385.0 331.0Q405 297 405.0 256.0Q405 215 385.0 181.0Q365 147 331.0 127.0Q297 107 256 107Z" />
+</vector>

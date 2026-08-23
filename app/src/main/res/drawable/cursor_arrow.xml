@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: Pictogrammers Material Design Icons 7.4.47, cursor-default. Apache-2.0. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M291 469Q283 473 274.5 470.0Q266 467 263 459L216 358L163 401Q157 405 148.5 405.0Q140 405 134.0 399.0Q128 393 128 384V64Q128 55 134.0 49.0Q140 43 148.5 43.0Q157 43 163 48V47L408 253Q415 259 416.0 267.5Q417 276 411.5 282.5Q406 289 399 290L332 304L378 404Q383 412 379.5 420.5Q376 429 368 433Z" />
+</vector>

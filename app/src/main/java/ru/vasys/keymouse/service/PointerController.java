@@ -11,8 +11,8 @@ public final class PointerController {
     private boolean leftHeld;
     private boolean scrollMode;
 
-    public PointerController(AccessibilityService service, CursorStyle cursorStyle) {
-        overlay = new CursorOverlay(service, cursorStyle);
+    public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges) {
+        overlay = new CursorOverlay(service, cursorStyle, wrapEdges);
         touch = new ContinuousTouchController(service);
     }
 
@@ -23,8 +23,11 @@ public final class PointerController {
 
     public void move(float dx, float dy) {
         if (!overlay.isVisible()) return;
-        overlay.moveBy(dx, dy);
-        if (leftHeld || scrollMode) touch.moveTo(overlay.x(), overlay.y());
+        boolean wrapped = overlay.moveBy(dx, dy);
+        if (leftHeld || scrollMode) {
+            if (wrapped) touch.rebase(overlay.screenX(), overlay.screenY());
+            else touch.moveTo(overlay.screenX(), overlay.screenY());
+        }
     }
 
     public void leftDown() {
@@ -74,6 +77,10 @@ public final class PointerController {
         overlay.setStyle(style);
     }
 
+    public void setWrapEdges(boolean enabled) {
+        overlay.setWrapEdges(enabled);
+    }
+
     public boolean isScrollMode() {
         return scrollMode;
     }
@@ -81,7 +88,7 @@ public final class PointerController {
     private void syncTouchState() {
         boolean shouldHold = overlay.isVisible() && (leftHeld || scrollMode);
         if (shouldHold && !touch.isRequestedDown()) {
-            touch.press(overlay.x(), overlay.y());
+            touch.press(overlay.screenX(), overlay.screenY());
         } else if (!shouldHold && touch.isRequestedDown()) {
             touch.release();
         }

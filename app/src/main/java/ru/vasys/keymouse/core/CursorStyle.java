@@ -3,8 +3,8 @@ package ru.vasys.keymouse.core;
 import ru.vasys.keymouse.R;
 
 public enum CursorStyle {
-    ARROW("ARROW", "Arrow", R.drawable.cursor_arrow, 0.25f, 0.08f),
-    HAND("HAND", "Hand", R.drawable.cursor_hand, 0.34f, 0.10f),
+    ARROW("ARROW", "Arrow", R.drawable.cursor_arrow, 0.25f, 0.125f),
+    HAND("HAND", "Hand", R.drawable.cursor_hand, 0.457f, 0.104f),
     CROSSHAIR("CROSSHAIR", "Crosshair", R.drawable.cursor_crosshair, 0.50f, 0.50f),
     TARGET("TARGET", "Target", R.drawable.cursor_target, 0.50f, 0.50f),
     RING("RING", "Ring", R.drawable.cursor_ring, 0.50f, 0.50f),

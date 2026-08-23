@@ -43,6 +43,7 @@ public final class MainActivity extends Activity {
     private Button triggerButton;
     private Button cursorSwitchButton;
     private Button speedButton;
+    private CheckBox wrapEdgesCheck;
     private Button cursorSetToggleButton;
     private LinearLayout cursorListContainer;
     private boolean cursorSetExpanded;
@@ -112,11 +113,60 @@ public final class MainActivity extends Activity {
         TextView title = text("KeyMouse", 26);
         title.setTypeface(null, 1);
         root.addView(title);
-        root.addView(text("Hold Mouse key to show/hide the cursor. While visible, tap Mouse key to switch Normal / Scroll.", 14));
 
-        TextView bindingsHeading = text("Bindings", 19);
-        bindingsHeading.setPadding(0, dp(12), 0, dp(4));
-        root.addView(bindingsHeading);
+        root.addView(sectionHeading("Accessibility"));
+        root.addView(sectionDescription("Required to read hardware keys, draw the cursor overlay and inject touch gestures."));
+
+        Button accessibility = button("Open Accessibility settings");
+        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(accessibility);
+
+        root.addView(sectionHeading("Pointer"));
+        root.addView(sectionDescription("Choose movement speed and whether the cursor wraps to the opposite screen edge."));
+
+        speedButton = button("");
+        speedButton.setOnClickListener(v -> {
+            int current = settings.speedPxPerTick();
+            int next = SPEEDS[0];
+            for (int i = 0; i < SPEEDS.length; i++) {
+                if (SPEEDS[i] == current) next = SPEEDS[(i + 1) % SPEEDS.length];
+            }
+            settings.setSpeedPxPerTick(next);
+            refreshSpeedButton();
+            notifyService();
+        });
+        speedButton.setPadding(0, dp(6), 0, 0);
+        root.addView(speedButton);
+
+        wrapEdgesCheck = new CheckBox(this);
+        wrapEdgesCheck.setText("Wrap cursor at screen edges");
+        wrapEdgesCheck.setPadding(0, dp(4), 0, dp(4));
+        wrapEdgesCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.wrapEdges() == isChecked) return;
+            settings.setWrapEdges(isChecked);
+            notifyService();
+        });
+        root.addView(wrapEdgesCheck);
+
+        cursorSetToggleButton = button("");
+        cursorSetToggleButton.setPadding(0, dp(8), 0, 0);
+        cursorSetToggleButton.setOnClickListener(v -> {
+            cursorSetExpanded = !cursorSetExpanded;
+            refreshCursorSetVisibility();
+        });
+        root.addView(cursorSetToggleButton);
+
+        cursorListContainer = new LinearLayout(this);
+        cursorListContainer.setOrientation(LinearLayout.VERTICAL);
+        TextView cursorHint = sectionDescription("Enable cursor styles for cycling and choose the one used by default.");
+        cursorListContainer.addView(cursorHint);
+        for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
+        root.addView(cursorListContainer);
+
+        root.addView(sectionHeading("Bindings"));
+        TextView triggerHint = sectionDescription("Hold Mouse key: show/hide. Tap it while visible: Normal/Scroll. Cursor switch: next enabled cursor.");
+        triggerHint.setPadding(0, 0, 0, dp(8));
+        root.addView(triggerHint);
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
@@ -155,50 +205,12 @@ public final class MainActivity extends Activity {
         legend.addView(legendItem("custom", COLOR_CUSTOM));
         root.addView(legend);
 
-        TextView triggerHint = text("Mouse key: hold = show/hide; tap while visible = Normal/Scroll. Cursor switch: cycles enabled cursors while the mouse is visible.", 12);
-        triggerHint.setTextColor(Color.DKGRAY);
-        root.addView(triggerHint);
-
-        speedButton = button("");
-        speedButton.setOnClickListener(v -> {
-            int current = settings.speedPxPerTick();
-            int next = SPEEDS[0];
-            for (int i = 0; i < SPEEDS.length; i++) {
-                if (SPEEDS[i] == current) next = SPEEDS[(i + 1) % SPEEDS.length];
-            }
-            settings.setSpeedPxPerTick(next);
-            refreshSpeedButton();
-            notifyService();
-        });
-        root.addView(speedButton);
-
-        cursorSetToggleButton = button("");
-        cursorSetToggleButton.setOnClickListener(v -> {
-            cursorSetExpanded = !cursorSetExpanded;
-            refreshCursorSetVisibility();
-        });
-        root.addView(cursorSetToggleButton);
-
-        cursorListContainer = new LinearLayout(this);
-        cursorListContainer.setOrientation(LinearLayout.VERTICAL);
-        TextView cursorHint = text("Enable the cursors that should participate in cycling. The selected row is the current default.", 12);
-        cursorHint.setTextColor(Color.DKGRAY);
-        cursorListContainer.addView(cursorHint);
-        for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
-        root.addView(cursorListContainer);
-
-        TextView inputNote = text("Hardware bindings are observed through Accessibility but never consumed: the same physical key event continues to Android and other apps. Mouse visibility can also be invoked by a system broadcast Intent.", 12);
-        inputNote.setPadding(0, dp(12), 0, dp(6));
-        inputNote.setTextColor(Color.DKGRAY);
+        TextView inputNote = sectionDescription("When the mouse is hidden, bound keys pass through normally. While visible, movement, click and cursor-switch are captured so Android focus stays still. Mouse key remains pass-through.");
+        inputNote.setPadding(0, dp(10), 0, dp(4));
         root.addView(inputNote);
 
-        Button accessibility = button("Open Accessibility settings");
-        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        root.addView(accessibility);
-
-        TextView footer = text("Long-press a binding control to clear it. Package: ru.vasys.keymouse", 12);
-        footer.setPadding(0, dp(8), 0, dp(12));
-        footer.setTextColor(Color.DKGRAY);
+        TextView footer = sectionDescription("Tap to bind. Long-press to clear. Focus or hover a binding to show its key ID in a system Toast.");
+        footer.setPadding(0, dp(2), 0, dp(12));
         root.addView(footer);
 
         refreshAll();
@@ -323,6 +335,7 @@ public final class MainActivity extends Activity {
         refreshCursorRows();
         refreshCursorSetVisibility();
         refreshSpeedButton();
+        refreshWrapEdges();
     }
 
     private void refreshBindings() {
@@ -362,7 +375,11 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshSpeedButton() {
-        if (speedButton != null) speedButton.setText("Speed: " + settings.speedPxPerTick() + " px/tick");
+        if (speedButton != null) speedButton.setText("Cursor speed: " + settings.speedPxPerTick());
+    }
+
+    private void refreshWrapEdges() {
+        if (wrapEdgesCheck != null) wrapEdgesCheck.setChecked(settings.wrapEdges());
     }
 
     private void notifyService() {
@@ -410,6 +427,20 @@ public final class MainActivity extends Activity {
     private TextView legendItem(String value, int color) {
         TextView t = text(value + "   ", 12);
         t.setTextColor(color);
+        return t;
+    }
+
+    private TextView sectionHeading(String value) {
+        TextView t = text(value, 19);
+        t.setTypeface(null, 1);
+        t.setPadding(0, dp(14), 0, dp(2));
+        return t;
+    }
+
+    private TextView sectionDescription(String value) {
+        TextView t = text(value, 12);
+        t.setTextColor(Color.DKGRAY);
+        t.setPadding(0, 0, 0, dp(6));
         return t;
     }
 

@@ -18,9 +18,10 @@ import ru.vasys.keymouse.core.MouseAction;
 import ru.vasys.keymouse.core.Settings;
 
 /**
- * Accessibility is used as a gesture backend and a non-consuming hardware-key observer.
- * Bound hardware keys are intentionally returned as false from onKeyEvent(), so Android
- * and other applications can still receive the same physical key events.
+ * Accessibility is used as the gesture backend and hardware-key router.
+ * When the mouse is hidden, bound keys pass through untouched. While the mouse is visible,
+ * mouse-control keys are consumed so Android focus/navigation does not run in parallel.
+ * The Mouse key itself is always allowed to pass through for interoperability.
  */
 public final class MouseAccessibilityService extends AccessibilityService {
     private static volatile MouseAccessibilityService runningInstance;
@@ -57,7 +58,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         runningInstance = this;
         settings = new Settings(this);
         bindings = settings.allBindings();
-        pointer = new PointerController(this, settings.cursorStyle());
+        pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges());
         enableKeyObservation();
     }
 
@@ -94,6 +95,9 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (action == MouseAction.TRIGGER) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) actionDown(action);
             else if (event.getAction() == KeyEvent.ACTION_UP) actionUp(action);
+
+            // Keep the trigger interoperable with KeyMapper/other apps. It must use the same
+            // pass-through policy for DOWN and UP even if a long press changes visibility.
             return false;
         }
 
@@ -106,8 +110,9 @@ public final class MouseAccessibilityService extends AccessibilityService {
             actionUp(action);
         }
 
-        // Never consume/remap the physical event. Other apps may use the same key.
-        return false;
+        // A visible mouse is an exclusive interaction mode. Consume movement/click/cursor
+        // controls so Android does not move focus or activate a focused view at the same time.
+        return true;
     }
 
     public void externalDown(MouseAction action) {
@@ -167,7 +172,10 @@ public final class MouseAccessibilityService extends AccessibilityService {
         main.post(() -> {
             if (settings == null) settings = new Settings(this);
             bindings = settings.allBindings();
-            if (pointer != null) pointer.setCursorStyle(settings.cursorStyle());
+            if (pointer != null) {
+                pointer.setCursorStyle(settings.cursorStyle());
+                pointer.setWrapEdges(settings.wrapEdges());
+            }
             enableKeyObservation();
         });
     }

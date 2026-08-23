@@ -24,6 +24,7 @@ public final class ContinuousTouchController {
     private float targetY;
     private float dispatchedEndX;
     private float dispatchedEndY;
+    private boolean restartAfterRelease;
 
     public ContinuousTouchController(AccessibilityService service) {
         this.service = service;
@@ -51,7 +52,30 @@ public final class ContinuousTouchController {
     public void release() {
         runOnMain(() -> {
             requestedDown = false;
+            restartAfterRelease = false;
             if (!busy && stroke != null) dispatchRelease();
+        });
+    }
+
+    /**
+     * Moves an active virtual finger to a non-contiguous position without
+     * drawing a giant gesture across the display. Accessibility has no true
+     * pointer teleport primitive, so edge wrapping is represented by a very
+     * short release + press at the wrapped coordinate.
+     */
+    public void rebase(float x, float y) {
+        runOnMain(() -> {
+            targetX = x;
+            targetY = y;
+            if (!requestedDown) return;
+            restartAfterRelease = true;
+            if (!busy) {
+                if (stroke != null) dispatchRelease();
+                else {
+                    restartAfterRelease = false;
+                    dispatchStart(targetX, targetY);
+                }
+            }
         });
     }
 
@@ -109,9 +133,15 @@ public final class ContinuousTouchController {
                         currentY = dispatchedEndY;
                         if (!continues) {
                             stroke = null;
+                            if (requestedDown && restartAfterRelease) {
+                                restartAfterRelease = false;
+                                dispatchStart(targetX, targetY);
+                            }
                             return;
                         }
                         if (!requestedDown) {
+                            dispatchRelease();
+                        } else if (restartAfterRelease) {
                             dispatchRelease();
                         } else if (distance(currentX, currentY, targetX, targetY) >= 0.5f) {
                             dispatchMove();
@@ -122,12 +152,16 @@ public final class ContinuousTouchController {
                     public void onCancelled(GestureDescription gestureDescription) {
                         busy = false;
                         stroke = null;
-                        if (requestedDown) dispatchStart(targetX, targetY);
+                        if (requestedDown) {
+                            restartAfterRelease = false;
+                            dispatchStart(targetX, targetY);
+                        }
                     }
                 }, main);
         if (!accepted) {
             busy = false;
             stroke = null;
+            restartAfterRelease = false;
         }
     }
 

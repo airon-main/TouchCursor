@@ -13,12 +13,15 @@ The cursor starts **hidden**:
 - **center cell** — real touch DOWN / MOVE / UP, so hold + movement = drag;
 - **Cursor switch** — cycles through enabled cursor styles while the mouse is visible and makes the new style the default;
 - **Scroll mode** — keeps one synthetic finger down and moves it continuously instead of generating repeated swipes.
+- **Wrap cursor at screen edges** — optional edge wrap; crossing one edge moves the logical cursor to the opposite side.
 
-## Hardware keys are not remapped
+## Hardware-key routing
 
-KeyMouse observes bound hardware keys through `AccessibilityService.onKeyEvent()`, performs its mouse action, and always returns `false`.
+KeyMouse does not globally remap or reserve the keyboard. Routing depends on whether the mouse is active:
 
-That means the original physical key event is **not consumed by KeyMouse** and is still delivered normally to Android / the foreground application. A bound key can therefore still be used by another application.
+- **mouse hidden** — bound keys pass through normally to Android and other apps;
+- **mouse visible** — movement, click and cursor-switch bindings are consumed by KeyMouse so Android focus does not move or activate controls in parallel;
+- **Mouse key** — remains pass-through for interoperability with Key Mapper and other apps.
 
 During binding calibration KeyMouse temporarily ignores its own action for the key being captured, but it does not disable hardware-key observation globally.
 
@@ -58,6 +61,8 @@ KeyMouse uses short system Toast messages instead of a permanent binding-info ro
 The cursor graphics come from **Pictogrammers Material Design Icons** (Apache-2.0); see `THIRD_PARTY_NOTICES.md`.
 
 Only enabled cursors participate in runtime cycling.
+
+The rendered cursor and synthetic touch share one logical hotspot coordinate; the cursor is drawn inside one fixed full-screen overlay so WindowManager edge clamping cannot move the visual cursor away from the touch point.
 
 ## System Intent API
 

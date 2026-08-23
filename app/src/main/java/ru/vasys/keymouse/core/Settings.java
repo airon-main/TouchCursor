@@ -16,6 +16,7 @@ public final class Settings {
     private static final String CURSOR_STYLE = "cursor_style";
     private static final String CURSOR_ENABLED = "cursor_enabled";
     private static final String SPEED = "speed";
+    private static final String WRAP_EDGES = "wrap_edges";
 
     private final SharedPreferences prefs;
 
@@ -174,5 +175,13 @@ public final class Settings {
 
     public void setSpeedPxPerTick(int value) {
         prefs.edit().putInt(SPEED, value).apply();
+    }
+
+    public boolean wrapEdges() {
+        return prefs.getBoolean(WRAP_EDGES, false);
+    }
+
+    public void setWrapEdges(boolean enabled) {
+        prefs.edit().putBoolean(WRAP_EDGES, enabled).apply();
     }
 }

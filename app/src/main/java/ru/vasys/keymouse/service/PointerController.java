@@ -24,9 +24,9 @@ public final class PointerController {
 
     public void move(float dx, float dy) {
         if (!overlay.isVisible()) return;
-        boolean wrapped = overlay.moveBy(dx, dy);
+        boolean needsRebase = overlay.moveBy(dx, dy);
         if (leftHeld || scrollMode) {
-            if (wrapped) touch.rebase(overlay.screenX(), overlay.screenY());
+            if (needsRebase) touch.rebase(overlay.screenX(), overlay.screenY());
             else touch.moveTo(overlay.screenX(), overlay.screenY());
         }
     }

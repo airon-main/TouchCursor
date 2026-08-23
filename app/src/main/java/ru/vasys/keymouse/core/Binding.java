@@ -11,11 +11,12 @@ public final class Binding {
         this.scanCode = scanCode;
     }
 
-    public boolean matches(KeyEvent event) {
-        if (scanCode > 0 && event.getScanCode() > 0) {
-            return scanCode == event.getScanCode();
-        }
-        return keyCode >= 0 && keyCode == event.getKeyCode();
+    public boolean matchesScanCode(KeyEvent event) {
+        return scanCode > 0 && event.getScanCode() > 0 && scanCode == event.getScanCode();
+    }
+
+    public boolean matchesKeyCode(int deliveredKeyCode) {
+        return scanCode <= 0 && keyCode >= 0 && keyCode == deliveredKeyCode;
     }
 
     public boolean isBound() {

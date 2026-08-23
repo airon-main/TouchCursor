@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- normalized Android-rotated DPAD key codes back to physical directions and aligned pointer/touch coordinates to the actual overlay viewport, fixing landscape behavior;
+- added a thin inverse-color outline to runtime cursors and UI previews;
+- replaced the launcher artwork with an original vector KeyMouse mark;
+- switched the project license from Apache-2.0 to MIT;
+- removed the redundant `build.sh`;
+- replaced the prerelease Gradle wrapper with stable Gradle 8.9 and made CI use the wrapper.
+
 ## 0.4.0
 
 - removed obsolete immersive-navigation workaround and accessibility UI-event subscription;

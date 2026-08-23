@@ -37,6 +37,7 @@ import ru.vasys.keymouse.core.CursorStyle;
 import ru.vasys.keymouse.core.MouseAction;
 import ru.vasys.keymouse.input.ExternalTriggerReceiver;
 import ru.vasys.keymouse.service.MouseAccessibilityService;
+import ru.vasys.keymouse.view.CursorGlyphView;
 
 public final class MainActivity extends Activity {
     private static final int[] SPEEDS = {5, 8, 10, 14, 20};
@@ -48,7 +49,7 @@ public final class MainActivity extends Activity {
     private Button triggerButton;
     private Button cursorSwitchButton;
     private Button speedButton;
-    private ImageView cursorAppearancePreview;
+    private CursorGlyphView cursorAppearancePreview;
     private CheckBox externalControlCheck;
     private CheckBox wrapEdgesCheck;
     private Spinner cursorColorSpinner;
@@ -65,7 +66,7 @@ public final class MainActivity extends Activity {
     private final Map<MouseAction, ImageButton> bindingButtons = new EnumMap<>(MouseAction.class);
     private final Map<CursorStyle, CheckBox> cursorChecks = new EnumMap<>(CursorStyle.class);
     private final Map<CursorStyle, RadioButton> cursorDefaults = new EnumMap<>(CursorStyle.class);
-    private final Map<CursorStyle, ImageView> cursorPreviews = new EnumMap<>(CursorStyle.class);
+    private final Map<CursorStyle, CursorGlyphView> cursorPreviews = new EnumMap<>(CursorStyle.class);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,8 +150,7 @@ public final class MainActivity extends Activity {
         root.addView(sectionHeading("Pointer"));
         root.addView(sectionDescription("Tune cursor movement and appearance. Preview updates immediately."));
 
-        cursorAppearancePreview = new ImageView(this);
-        cursorAppearancePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        cursorAppearancePreview = new CursorGlyphView(this);
         LinearLayout.LayoutParams appearancePreviewParams = new LinearLayout.LayoutParams(dp(42), dp(42));
         appearancePreviewParams.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(cursorAppearancePreview, appearancePreviewParams);
@@ -364,8 +364,8 @@ public final class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(2), 0, dp(2));
 
-        ImageView preview = new ImageView(this);
-        preview.setImageResource(style.drawableRes);
+        CursorGlyphView preview = new CursorGlyphView(this);
+        preview.setStyle(style);
         cursorPreviews.put(style, preview);
         row.addView(preview, new LinearLayout.LayoutParams(dp(38), dp(38)));
 
@@ -527,18 +527,18 @@ public final class MainActivity extends Activity {
 
     private void refreshCursorPreviews(int sizeDp) {
         int size = dp(sizeDp);
-        int tint = settings.cursorColor().argb;
+        CursorColor color = settings.cursorColor();
         if (cursorAppearancePreview != null) {
-            cursorAppearancePreview.setImageResource(settings.cursorStyle().drawableRes);
-            cursorAppearancePreview.setColorFilter(tint);
+            cursorAppearancePreview.setStyle(settings.cursorStyle());
+            cursorAppearancePreview.setCursorColor(color);
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) cursorAppearancePreview.getLayoutParams();
             lp.width = size;
             lp.height = size;
             cursorAppearancePreview.setLayoutParams(lp);
         }
-        for (Map.Entry<CursorStyle, ImageView> entry : cursorPreviews.entrySet()) {
-            ImageView preview = entry.getValue();
-            preview.setColorFilter(tint);
+        for (Map.Entry<CursorStyle, CursorGlyphView> entry : cursorPreviews.entrySet()) {
+            CursorGlyphView preview = entry.getValue();
+            preview.setCursorColor(color);
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) preview.getLayoutParams();
             lp.width = size;
             lp.height = size;

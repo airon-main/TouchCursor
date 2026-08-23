@@ -5,6 +5,7 @@ import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
+import android.view.WindowManager;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.Toast;
@@ -14,6 +15,7 @@ import java.util.Map;
 
 import ru.vasys.keymouse.core.Binding;
 import ru.vasys.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.core.DpadKeyNormalizer;
 import ru.vasys.keymouse.core.MouseAction;
 import ru.vasys.keymouse.core.Settings;
 
@@ -39,6 +41,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean triggerLongFired;
     private Toast feedbackToast;
     private float movementSpeed = 10f;
+    private int displayRotation;
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
@@ -61,6 +64,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         bindings = settings.allBindings();
         pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges(), settings.cursorColor(), settings.cursorSizeDp());
         movementSpeed = settings.speedPxPerTick();
+        refreshDisplayRotation();
     }
 
     @Override
@@ -72,6 +76,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        refreshDisplayRotation();
         if (pointer != null) pointer.refreshDisplayBounds();
     }
 
@@ -197,10 +202,24 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     private MouseAction findAction(KeyEvent event) {
         if (bindings == null) return null;
+
+        // A calibrated scan code is physical and therefore wins over Android's rotated
+        // DPAD keyCode. This is also what keeps diagonal/custom keys untouched.
         for (Map.Entry<MouseAction, Binding> e : bindings.entrySet()) {
-            if (e.getValue().matches(event)) return e.getKey();
+            if (e.getValue().matchesScanCode(event)) return e.getKey();
+        }
+
+        int physicalKeyCode = DpadKeyNormalizer.toPhysicalDirection(event.getKeyCode(), displayRotation);
+        for (Map.Entry<MouseAction, Binding> e : bindings.entrySet()) {
+            if (e.getValue().matchesKeyCode(physicalKeyCode)) return e.getKey();
         }
         return null;
+    }
+
+    @SuppressWarnings("deprecation")
+    private void refreshDisplayRotation() {
+        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        displayRotation = wm == null ? 0 : wm.getDefaultDisplay().getRotation();
     }
 
     private void actionDown(MouseAction action) {

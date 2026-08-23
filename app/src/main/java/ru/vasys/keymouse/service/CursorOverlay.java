@@ -2,74 +2,58 @@ package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.graphics.Point;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import ru.vasys.keymouse.core.CursorColor;
 import ru.vasys.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.view.CursorGlyphView;
 
 /**
- * Draws the cursor in one fixed full-screen accessibility overlay.
+ * Draws the cursor in one fixed accessibility overlay.
  *
- * The logical hotspot (x/y) is the only pointer coordinate in the app. The
- * cursor image is rendered around that exact coordinate and Accessibility
- * gestures use the same value directly.
- *
- * The overlay is attached only while the mouse is visible. Display bounds are
- * cached and refreshed when the overlay is shown or Android reports a
- * configuration change; movement itself does not query WindowManager.
+ * Pointer coordinates are local to the actual laid-out overlay viewport. Gesture
+ * coordinates are derived from that same point plus the viewport's real screen origin.
+ * This matters on landscape OEM builds where system bars can offset or shrink an
+ * accessibility overlay relative to the app-visible display metrics.
  */
 public final class CursorOverlay {
-    private static final int IMAGE_PADDING_DP = 2;
-
     private final AccessibilityService service;
     private final WindowManager wm;
     private final FrameLayout root;
-    private final FrameLayout cursor;
-    private final ImageView shadow;
-    private final ImageView foreground;
+    private final CursorGlyphView cursor;
     private final WindowManager.LayoutParams params;
-    private int cursorSizePx;
-    private final int imagePaddingPx;
 
-    private int screenWidth;
-    private int screenHeight;
+    private int cursorSizePx;
+    private int viewportWidth = 1;
+    private int viewportHeight = 1;
+    private int viewportScreenX;
+    private int viewportScreenY;
     private float x;
     private float y;
     private boolean visible;
     private boolean added;
     private boolean wrapEdges;
+    private boolean viewportChangedSinceMove;
     private CursorStyle style;
-    private CursorColor color;
 
     public CursorOverlay(AccessibilityService service, CursorStyle style, boolean wrapEdges,
                          CursorColor color, int cursorSizeDp) {
         this.service = service;
-        this.wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
-        this.cursorSizePx = dp(cursorSizeDp);
-        this.imagePaddingPx = dp(IMAGE_PADDING_DP);
+        wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
+        cursorSizePx = dp(cursorSizeDp);
 
         root = new FrameLayout(service);
         root.setClipChildren(false);
         root.setClipToPadding(false);
+        root.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                        oldLeft, oldTop, oldRight, oldBottom) -> refreshViewportFromRoot());
 
-        cursor = new FrameLayout(service);
-        cursor.setClipChildren(false);
-        cursor.setClipToPadding(false);
-        FrameLayout.LayoutParams cursorParams = new FrameLayout.LayoutParams(cursorSizePx, cursorSizePx);
-        root.addView(cursor, cursorParams);
-
-        shadow = image(service, imagePaddingPx);
-        foreground = image(service, imagePaddingPx);
-        shadow.setScaleX(1.13f);
-        shadow.setScaleY(1.13f);
-        cursor.addView(shadow, new FrameLayout.LayoutParams(-1, -1));
-        cursor.addView(foreground, new FrameLayout.LayoutParams(-1, -1));
+        cursor = new CursorGlyphView(service);
+        root.addView(cursor, new FrameLayout.LayoutParams(cursorSizePx, cursorSizePx));
 
         params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -82,12 +66,11 @@ public final class CursorOverlay {
         params.gravity = Gravity.TOP | Gravity.LEFT;
 
         this.wrapEdges = wrapEdges;
-        this.color = color == null ? CursorColor.WHITE : color;
-        updateScreenBounds();
-        x = (screenWidth - 1) / 2f;
-        y = (screenHeight - 1) / 2f;
+        updateFallbackViewport();
+        x = (viewportWidth - 1) / 2f;
+        y = (viewportHeight - 1) / 2f;
         setStyle(style);
-        applyTint();
+        setCursorColor(color);
         applyCursorPosition();
     }
 
@@ -96,76 +79,86 @@ public final class CursorOverlay {
         visible = false;
     }
 
-    /** Refresh cached real-display bounds after rotation / configuration changes. */
+    /** Refresh viewport after rotation/configuration changes. */
     public void refreshDisplayBounds() {
-        updateScreenBounds();
-        x = normalizeForCurrentMode(x, screenWidth);
-        y = normalizeForCurrentMode(y, screenHeight);
+        if (added && root.getWidth() > 0 && root.getHeight() > 0) refreshViewportFromRoot();
+        else updateFallbackViewport();
+        normalizePointer();
         applyCursorPosition();
     }
 
-    private void updateScreenBounds() {
-        Point size = new Point();
-        wm.getDefaultDisplay().getRealSize(size);
-        screenWidth = Math.max(1, size.x);
-        screenHeight = Math.max(1, size.y);
+    private void updateFallbackViewport() {
+        DisplayMetrics metrics = service.getResources().getDisplayMetrics();
+        viewportWidth = Math.max(1, metrics.widthPixels);
+        viewportHeight = Math.max(1, metrics.heightPixels);
+        viewportScreenX = 0;
+        viewportScreenY = 0;
     }
 
-    /**
-     * Moves the logical pointer. Returns true when either axis wrapped to the
-     * opposite edge.
-     */
+    private void refreshViewportFromRoot() {
+        int width = root.getWidth();
+        int height = root.getHeight();
+        if (width <= 0 || height <= 0) return;
+        int[] location = new int[2];
+        root.getLocationOnScreen(location);
+        if (viewportWidth != width || viewportHeight != height
+                || viewportScreenX != location[0] || viewportScreenY != location[1]) {
+            viewportChangedSinceMove = true;
+        }
+        viewportWidth = width;
+        viewportHeight = height;
+        viewportScreenX = location[0];
+        viewportScreenY = location[1];
+        normalizePointer();
+        applyCursorPosition();
+    }
+
+    /** Moves the logical pointer. Returns true when an active touch must be rebased. */
     public boolean moveBy(float dx, float dy) {
         float rawX = x + dx;
         float rawY = y + dy;
-        boolean wrapped = false;
+        boolean needsRebase = viewportChangedSinceMove;
+        viewportChangedSinceMove = false;
         if (wrapEdges) {
-            wrapped = rawX < 0 || rawX >= screenWidth || rawY < 0 || rawY >= screenHeight;
-            x = wrap(rawX, screenWidth);
-            y = wrap(rawY, screenHeight);
+            needsRebase |= rawX < 0 || rawX >= viewportWidth || rawY < 0 || rawY >= viewportHeight;
+            x = wrap(rawX, viewportWidth);
+            y = wrap(rawY, viewportHeight);
         } else {
-            x = clamp(rawX, 0, screenWidth - 1);
-            y = clamp(rawY, 0, screenHeight - 1);
+            x = clamp(rawX, 0, viewportWidth - 1);
+            y = clamp(rawY, 0, viewportHeight - 1);
         }
         applyCursorPosition();
-        return wrapped;
+        return needsRebase;
     }
 
     public void setVisible(boolean value) {
         if (visible == value) return;
         visible = value;
-        if (value) {
-            refreshDisplayBounds();
-            addOverlayWindow();
-        } else {
-            removeOverlayWindow();
-        }
+        if (value) addOverlayWindow(); else removeOverlayWindow();
     }
 
     public boolean isVisible() {
         return visible;
     }
 
-    /** Exact screen-space pointer coordinate used for Accessibility gestures. */
+    /** Exact screen-space coordinate used for Accessibility gestures. */
     public float screenX() {
-        return x;
+        return viewportScreenX + x;
     }
 
-    /** Exact screen-space pointer coordinate used for Accessibility gestures. */
+    /** Exact screen-space coordinate used for Accessibility gestures. */
     public float screenY() {
-        return y;
+        return viewportScreenY + y;
     }
 
     public void setStyle(CursorStyle style) {
         this.style = style == null ? CursorStyle.ARROW : style;
-        shadow.setImageResource(this.style.drawableRes);
-        foreground.setImageResource(this.style.drawableRes);
+        cursor.setStyle(this.style);
         applyCursorPosition();
     }
 
     public void setCursorColor(CursorColor color) {
-        this.color = color == null ? CursorColor.WHITE : color;
-        applyTint();
+        cursor.setCursorColor(color);
     }
 
     public void setCursorSizeDp(int sizeDp) {
@@ -181,15 +174,12 @@ public final class CursorOverlay {
 
     public void setWrapEdges(boolean enabled) {
         wrapEdges = enabled;
-        x = normalizeForCurrentMode(x, screenWidth);
-        y = normalizeForCurrentMode(y, screenHeight);
+        normalizePointer();
         applyCursorPosition();
     }
 
     public void setScrollMode(boolean scrollMode) {
-        // Keep the user-selected cursor color in every mode. Runtime mode is
-        // already surfaced through a Toast when Normal/Scroll changes.
-        foreground.setAlpha(scrollMode ? 0.80f : 1.0f);
+        cursor.setCursorAlpha(scrollMode ? 0.80f : 1.0f);
     }
 
     private void addOverlayWindow() {
@@ -197,6 +187,7 @@ public final class CursorOverlay {
         try {
             wm.addView(root, params);
             added = true;
+            root.post(this::refreshViewportFromRoot);
         } catch (RuntimeException ignored) {
             added = false;
         }
@@ -216,45 +207,23 @@ public final class CursorOverlay {
         cursor.setTranslationY(y - hotspotOffsetY());
     }
 
-    private void applyTint() {
-        int foregroundColor = color == null ? Color.WHITE : color.argb;
-        foreground.setColorFilter(foregroundColor);
-        shadow.setColorFilter(isLight(foregroundColor) ? Color.BLACK : Color.WHITE);
-    }
-
     private float hotspotOffsetX() {
         CursorStyle resolved = style == null ? CursorStyle.ARROW : style;
-        int content = Math.max(1, cursorSizePx - imagePaddingPx * 2);
-        return imagePaddingPx + content * resolved.hotspotX;
+        return cursorSizePx * resolved.hotspotX;
     }
 
     private float hotspotOffsetY() {
         CursorStyle resolved = style == null ? CursorStyle.ARROW : style;
-        int content = Math.max(1, cursorSizePx - imagePaddingPx * 2);
-        return imagePaddingPx + content * resolved.hotspotY;
+        return cursorSizePx * resolved.hotspotY;
     }
 
-    private float normalizeForCurrentMode(float value, int size) {
-        return wrapEdges ? wrap(value, size) : clamp(value, 0, size - 1);
-    }
-
-    private static ImageView image(Context context, int paddingPx) {
-        ImageView result = new ImageView(context);
-        result.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        result.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
-        return result;
+    private void normalizePointer() {
+        x = wrapEdges ? wrap(x, viewportWidth) : clamp(x, 0, viewportWidth - 1);
+        y = wrapEdges ? wrap(y, viewportHeight) : clamp(y, 0, viewportHeight - 1);
     }
 
     private int dp(int value) {
         return Math.round(value * service.getResources().getDisplayMetrics().density);
-    }
-
-    private static boolean isLight(int argb) {
-        double r = Color.red(argb) / 255.0;
-        double g = Color.green(argb) / 255.0;
-        double b = Color.blue(argb) / 255.0;
-        double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        return luminance >= 0.52;
     }
 
     private static float wrap(float value, int size) {

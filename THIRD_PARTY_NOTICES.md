@@ -2,7 +2,7 @@
 
 ## Pictogrammers Material Design Icons
 
-Stock cursor vector assets come from Pictogrammers Material Design Icons and are converted to Android VectorDrawable paths without changing their geometry. The KeyMouse-specific Inward corners reticle is original project artwork and is covered by the project license.
+Stock cursor vector assets come from Pictogrammers Material Design Icons and are converted to Android VectorDrawable paths without changing their geometry. The KeyMouse-specific Inward corners reticle and launcher artwork are original project artwork and are covered by the MIT project license.
 
 Used glyphs:
 

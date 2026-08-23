@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original KeyMouse artwork: keyboard targeting brackets + pointer arrow. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Four inward-facing corner keys. -->
+    <path
+        android:fillColor="#FF7BE3F0"
+        android:pathData="M40,40H24V34H34V24H40V40 M68,40V24H74V34H84V40H68 M40,68V84H34V74H24V68H40 M68,68H84V74H74V84H68V68" />
+    <!-- Central key / hotspot. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M49,49H59V59H49Z" />
+    <!-- Mouse pointer emerging from the keyboard target. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M55,54L55,78L61.5,72.5L67,84L72,81.5L66.5,70L75,69Z" />
+</vector>

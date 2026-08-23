@@ -3,20 +3,20 @@
 A lightweight keyboard / D-pad mouse and touch layer for Android 8+.
 
 - Package: `ru.vasys.keymouse`
-- Current version: **0.4.0**
+- Current version: **0.4.1**
 - Minimum Android: **8.0 / API 26**
 - Target SDK: **35**
 - No AndroidX, network permission, analytics or ads
 
 ## What it does
 
-- 8-direction cursor movement with configurable hardware bindings;
+- 8-direction cursor movement with configurable hardware bindings; physical D-pad directions stay stable when Android rotates key codes in landscape;
 - real touch **DOWN / MOVE / UP** for click-hold and drag;
 - continuous Scroll mode using Android continued gesture strokes instead of repeated swipes;
 - long **Mouse key** press shows/hides the cursor;
 - short Mouse-key press while visible switches **Normal / Scroll**;
 - optional screen-edge wrapping;
-- configurable cursor set, default cursor, color and size;
+- configurable cursor set, default cursor, color and size, with a thin inverse-color outline;
 - automatic light / dark settings UI;
 - optional broadcast Intent control for Key Mapper, Tasker, Automate or ADB.
 
@@ -86,22 +86,16 @@ KeyMouse is event-driven while idle:
 - no network access;
 - no hidden overlay window.
 
-The movement ticker runs only while a movement key is physically held. Display bounds are cached and refreshed on configuration changes instead of being queried every movement frame.
+The movement ticker runs only while a movement key is physically held. Pointer bounds come from the actual laid-out accessibility overlay viewport. This keeps cursor and touch coordinates aligned across portrait/landscape layouts and OEM system-bar insets.
 
 ## Build
 
 ```sh
-./build.sh
+./gradlew :app:assembleDebug
 ```
 
-Or:
-
-```sh
-gradle :app:assembleDebug
-```
-
-Requires JDK 17+ and Android SDK 35. GitHub Actions builds the debug APK and runs Android lint on every push / pull request.
+Requires JDK 17+ and Android SDK 35. The repository pins Gradle 8.9 through the wrapper. GitHub Actions builds debug/release variants and runs Android lint on every push / pull request.
 
 Cursor assets derived from Pictogrammers Material Design Icons are documented in `THIRD_PARTY_NOTICES.md`.
 
-License: Apache-2.0. See `PRIVACY.md` for data handling.
+Project license: MIT. Third-party cursor assets keep their own licenses in `THIRD_PARTY_NOTICES.md`. See `PRIVACY.md` for data handling.

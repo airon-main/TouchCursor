@@ -21,6 +21,11 @@ public final class Settings {
     private static final String CURSOR_SET_VERSION = "cursor_set_version";
     private static final String CURSOR_SIZE = "cursor_size_dp";
     private static final String EXTERNAL_CONTROL = "external_control";
+    private static final String ROTATE_LANDSCAPE_CONTROLS = "rotate_landscape_controls";
+    private static final String INVERT_X_PORTRAIT = "invert_x_portrait";
+    private static final String INVERT_Y_PORTRAIT = "invert_y_portrait";
+    private static final String INVERT_X_LANDSCAPE = "invert_x_landscape";
+    private static final String INVERT_Y_LANDSCAPE = "invert_y_landscape";
     private static final int CURRENT_CURSOR_SET_VERSION = 3;
     public static final int DEFAULT_CURSOR_SIZE_DP = 42;
     public static final int MIN_CURSOR_SIZE_DP = 24;
@@ -234,6 +239,47 @@ public final class Settings {
 
     public void setExternalControlEnabled(boolean enabled) {
         prefs.edit().putBoolean(EXTERNAL_CONTROL, enabled).apply();
+    }
+
+
+    public boolean rotateLandscapeControls() {
+        return prefs.getBoolean(ROTATE_LANDSCAPE_CONTROLS, false);
+    }
+
+    public void setRotateLandscapeControls(boolean enabled) {
+        prefs.edit().putBoolean(ROTATE_LANDSCAPE_CONTROLS, enabled).apply();
+    }
+
+    public boolean invertHorizontalPortrait() {
+        return prefs.getBoolean(INVERT_X_PORTRAIT, false);
+    }
+
+    public void setInvertHorizontalPortrait(boolean enabled) {
+        prefs.edit().putBoolean(INVERT_X_PORTRAIT, enabled).apply();
+    }
+
+    public boolean invertVerticalPortrait() {
+        return prefs.getBoolean(INVERT_Y_PORTRAIT, false);
+    }
+
+    public void setInvertVerticalPortrait(boolean enabled) {
+        prefs.edit().putBoolean(INVERT_Y_PORTRAIT, enabled).apply();
+    }
+
+    public boolean invertHorizontalLandscape() {
+        return prefs.getBoolean(INVERT_X_LANDSCAPE, false);
+    }
+
+    public void setInvertHorizontalLandscape(boolean enabled) {
+        prefs.edit().putBoolean(INVERT_X_LANDSCAPE, enabled).apply();
+    }
+
+    public boolean invertVerticalLandscape() {
+        return prefs.getBoolean(INVERT_Y_LANDSCAPE, false);
+    }
+
+    public void setInvertVerticalLandscape(boolean enabled) {
+        prefs.edit().putBoolean(INVERT_Y_LANDSCAPE, enabled).apply();
     }
 
     public boolean wrapEdges() {

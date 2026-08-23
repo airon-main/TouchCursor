@@ -52,6 +52,11 @@ public final class MainActivity extends Activity {
     private CursorGlyphView cursorAppearancePreview;
     private CheckBox externalControlCheck;
     private CheckBox wrapEdgesCheck;
+    private CheckBox rotateLandscapeCheck;
+    private CheckBox invertHorizontalPortraitCheck;
+    private CheckBox invertVerticalPortraitCheck;
+    private CheckBox invertHorizontalLandscapeCheck;
+    private CheckBox invertVerticalLandscapeCheck;
     private Spinner cursorColorSpinner;
     private TextView cursorSizeLabel;
     private SeekBar cursorSizeSeek;
@@ -265,6 +270,59 @@ public final class MainActivity extends Activity {
         for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
         root.addView(cursorListContainer);
 
+        root.addView(sectionHeading("Direction behavior"));
+        root.addView(sectionDescription("Choose how physical directions map to cursor movement. Landscape rotation is optional; inversion is applied after rotation."));
+
+        rotateLandscapeCheck = optionCheckBox("Rotate controls with screen in landscape");
+        rotateLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.rotateLandscapeControls() == isChecked) return;
+            settings.setRotateLandscapeControls(isChecked);
+            notifyService();
+        });
+        root.addView(rotateLandscapeCheck);
+
+        TextView portraitLabel = text("Portrait", 14);
+        portraitLabel.setTypeface(null, 1);
+        portraitLabel.setPadding(0, dp(8), 0, 0);
+        root.addView(portraitLabel);
+
+        invertHorizontalPortraitCheck = optionCheckBox("Invert left / right");
+        invertHorizontalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.invertHorizontalPortrait() == isChecked) return;
+            settings.setInvertHorizontalPortrait(isChecked);
+            notifyService();
+        });
+        root.addView(invertHorizontalPortraitCheck);
+
+        invertVerticalPortraitCheck = optionCheckBox("Invert up / down");
+        invertVerticalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.invertVerticalPortrait() == isChecked) return;
+            settings.setInvertVerticalPortrait(isChecked);
+            notifyService();
+        });
+        root.addView(invertVerticalPortraitCheck);
+
+        TextView landscapeLabel = text("Landscape", 14);
+        landscapeLabel.setTypeface(null, 1);
+        landscapeLabel.setPadding(0, dp(8), 0, 0);
+        root.addView(landscapeLabel);
+
+        invertHorizontalLandscapeCheck = optionCheckBox("Invert left / right");
+        invertHorizontalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.invertHorizontalLandscape() == isChecked) return;
+            settings.setInvertHorizontalLandscape(isChecked);
+            notifyService();
+        });
+        root.addView(invertHorizontalLandscapeCheck);
+
+        invertVerticalLandscapeCheck = optionCheckBox("Invert up / down");
+        invertVerticalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.invertVerticalLandscape() == isChecked) return;
+            settings.setInvertVerticalLandscape(isChecked);
+            notifyService();
+        });
+        root.addView(invertVerticalLandscapeCheck);
+
         root.addView(sectionHeading("Bindings"));
         TextView triggerHint = sectionDescription("Hold Mouse key: show/hide. Tap it while visible: Normal/Scroll. Cursor switch: next enabled cursor.");
         triggerHint.setPadding(0, 0, 0, dp(8));
@@ -444,6 +502,15 @@ public final class MainActivity extends Activity {
         refreshCursorColor();
         refreshCursorSize();
         refreshCursorPreviews();
+        refreshDirectionBehavior();
+    }
+
+    private void refreshDirectionBehavior() {
+        if (rotateLandscapeCheck != null) rotateLandscapeCheck.setChecked(settings.rotateLandscapeControls());
+        if (invertHorizontalPortraitCheck != null) invertHorizontalPortraitCheck.setChecked(settings.invertHorizontalPortrait());
+        if (invertVerticalPortraitCheck != null) invertVerticalPortraitCheck.setChecked(settings.invertVerticalPortrait());
+        if (invertHorizontalLandscapeCheck != null) invertHorizontalLandscapeCheck.setChecked(settings.invertHorizontalLandscape());
+        if (invertVerticalLandscapeCheck != null) invertVerticalLandscapeCheck.setChecked(settings.invertVerticalLandscape());
     }
 
     private void refreshBindings() {
@@ -617,6 +684,13 @@ public final class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams weighted() {
         return new LinearLayout.LayoutParams(0, -2, 1f);
+    }
+
+    private CheckBox optionCheckBox(String label) {
+        CheckBox check = new CheckBox(this);
+        check.setText(label);
+        check.setPadding(0, dp(2), 0, dp(2));
+        return check;
     }
 
     private Button button(String label) {

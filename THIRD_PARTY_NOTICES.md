@@ -17,4 +17,4 @@ Used glyphs:
 
 Project: https://pictogrammers.com/library/mdi/
 
-License: Apache License 2.0. Pictogrammers documents Material Design Icons and the distributed fonts as Apache-2.0 licensed.
+License: Apache License 2.0.

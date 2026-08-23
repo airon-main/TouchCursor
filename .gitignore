@@ -9,3 +9,8 @@ local.properties
 *.patch
 *.patch.sha256
 PATCHES-SHA256.txt
+
+# Release signing secrets
+keystore.properties
+*.jks
+*.keystore

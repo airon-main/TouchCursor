@@ -14,6 +14,7 @@ import ru.vasys.keymouse.core.CursorStyle;
  * thin inverse-color outline without maintaining separate stroked assets.
  */
 public final class CursorGlyphView extends FrameLayout {
+    private static final float OUTLINE_DP = 0.75f;
     private final ImageView outline;
     private final ImageView foreground;
     private CursorStyle style = CursorStyle.ARROW;
@@ -61,7 +62,7 @@ public final class CursorGlyphView extends FrameLayout {
 
     private void updateOutlineScale() {
         int content = Math.max(1, Math.min(getWidth(), getHeight()));
-        float outlinePx = Math.max(1f, getResources().getDisplayMetrics().density);
+        float outlinePx = Math.max(1f, getResources().getDisplayMetrics().density * OUTLINE_DP);
         float scale = (content + outlinePx * 2f) / content;
         outline.setScaleX(scale);
         outline.setScaleY(scale);

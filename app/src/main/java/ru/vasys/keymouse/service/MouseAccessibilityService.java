@@ -5,6 +5,7 @@ import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
+import android.view.Surface;
 import android.view.WindowManager;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
@@ -42,6 +43,11 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private Toast feedbackToast;
     private float movementSpeed = 10f;
     private int displayRotation;
+    private boolean rotateLandscapeControls;
+    private boolean invertHorizontalPortrait;
+    private boolean invertVerticalPortrait;
+    private boolean invertHorizontalLandscape;
+    private boolean invertVerticalLandscape;
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
@@ -64,6 +70,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         bindings = settings.allBindings();
         pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges(), settings.cursorColor(), settings.cursorSizeDp());
         movementSpeed = settings.speedPxPerTick();
+        reloadDirectionPreferences();
         refreshDisplayRotation();
     }
 
@@ -191,6 +198,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (settings == null) settings = new Settings(this);
             bindings = settings.allBindings();
             movementSpeed = settings.speedPxPerTick();
+            reloadDirectionPreferences();
             if (pointer != null) {
                 pointer.setCursorStyle(settings.cursorStyle());
                 pointer.setWrapEdges(settings.wrapEdges());
@@ -322,8 +330,36 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if ((vx == 0 && vy == 0) || pointer == null) return;
         vx = Integer.signum(vx);
         vy = Integer.signum(vy);
+
+        boolean landscape = displayRotation == Surface.ROTATION_90
+                || displayRotation == Surface.ROTATION_270;
+        if (landscape && rotateLandscapeControls) {
+            int originalX = vx;
+            if (displayRotation == Surface.ROTATION_90) {
+                vx = vy;
+                vy = -originalX;
+            } else {
+                vx = -vy;
+                vy = originalX;
+            }
+        }
+
+        boolean invertX = landscape ? invertHorizontalLandscape : invertHorizontalPortrait;
+        boolean invertY = landscape ? invertVerticalLandscape : invertVerticalPortrait;
+        if (invertX) vx = -vx;
+        if (invertY) vy = -vy;
+
         float scale = (vx != 0 && vy != 0) ? 0.70710678f : 1f;
         pointer.move(vx * speed * scale, vy * speed * scale);
+    }
+
+    private void reloadDirectionPreferences() {
+        if (settings == null) return;
+        rotateLandscapeControls = settings.rotateLandscapeControls();
+        invertHorizontalPortrait = settings.invertHorizontalPortrait();
+        invertVerticalPortrait = settings.invertVerticalPortrait();
+        invertHorizontalLandscape = settings.invertHorizontalLandscape();
+        invertVerticalLandscape = settings.invertVerticalLandscape();
     }
 
     private void showToast(String message) {

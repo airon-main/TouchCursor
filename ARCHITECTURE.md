@@ -1,47 +1,38 @@
 # Architecture
 
 ```text
-hardware KeyEvent / system broadcast Intent
-                    ↓
-                 MouseAction
-                    ↓
-          MouseAccessibilityService
-             ↙               ↘
-       trigger state       pressed directions
-             ↓                    ↓
-                    PointerController
-                     ↙          ↘
-               CursorOverlay   ContinuousTouchController
+KeyEvent / broadcast
+        ↓
+   MouseAction
+        ↓
+MouseAccessibilityService
+        ↓
+ PointerController
+   ↙          ↘
+CursorOverlay  ContinuousTouchController
 ```
 
-The cursor starts hidden:
+The Accessibility service is used only for hardware-key filtering and gesture injection. It does not inspect the UI tree or subscribe to accessibility events.
 
-- long Mouse-key press toggles cursor visibility;
-- short Mouse-key press while visible toggles Normal / Scroll;
-- Cursor-switch press cycles the enabled cursor set and updates the default.
+The cursor overlay exists only while mouse mode is visible. Cursor position is local to the actual laid-out overlay viewport; touch gestures use that viewport's screen origin plus the same pointer coordinate.
 
-Android may rotate the four `KEYCODE_DPAD_*` values with display orientation. Calibrated scan-code bindings are matched first; key-code-only bindings are inverse-rotated back to the physical D-pad direction before matching, so the keyboard layout stays stable in landscape.
+A held click or Scroll mode uses one continued synthetic pointer through `StrokeDescription.continueStroke()`. Gesture cancellation clears the active stroke and waits for the next physical movement instead of retrying in a loop.
 
-Hardware `KeyEvent`s use session-based routing. While the mouse is hidden, bound keys pass through unchanged. While the mouse is visible, movement, click and cursor-switch events are consumed after KeyMouse handles them so Android focus navigation cannot run in parallel. The Mouse-key trigger remains pass-through on both DOWN and UP for normal application interoperability. Android itself allows only one Accessibility service to own key filtering at a time, so other accessibility remappers may require the external broadcast backend. Calibration only suppresses KeyMouse's own action while a new bind is being captured.
+## Input mapping
 
-The exported `ExternalTriggerReceiver` provides system broadcast actions for mouse visibility, mode, cursor cycling, movement and touch down/up. It is disabled at the component level by default and is enabled only after the user opts into external control in settings.
+Bindings represent physical controls. Scan codes win when available. Key-code-only D-pad bindings are normalized back from Android's display-rotated key codes before matching.
 
-A held synthetic touch is one logical pointer. `ContinuousTouchController` starts a `StrokeDescription(..., willContinue=true)` and advances it with `continueStroke()`. Releasing creates the final continuation with `willContinue=false`. Scroll mode never loops independent swipe gestures.
+Movement is transformed after binding resolution:
 
-`CursorOverlay` is one fixed accessibility overlay while mouse mode is visible. The logical hotspot `(x, y)` is local to the overlay's actual laid-out viewport; injected gesture coordinates are `viewport screen origin + hotspot`. This keeps visual and touch coordinates aligned when OEM landscape layouts offset or shrink overlays around system bars.
+1. optional landscape rotation with the display;
+2. portrait or landscape horizontal inversion;
+3. portrait or landscape vertical inversion;
+4. diagonal speed normalization.
 
-Optional edge wrapping is applied to the logical hotspot. If a wrap occurs while a synthetic finger is already down, `ContinuousTouchController` rebases with a short release + press at the opposite edge rather than drawing an unintended full-screen line.
+This keeps calibration independent from orientation preferences.
 
+## Runtime
 
-## Overlay lifetime and idle behavior
+There is no polling while idle. The 16 ms movement ticker runs only while a movement key is held. The overlay is removed from WindowManager when the mouse is hidden.
 
-`CursorOverlay` is attached to WindowManager only while the mouse is visible and removed completely when hidden. The actual overlay viewport geometry is refreshed from layout/configuration changes; movement does not query WindowManager every frame. The Accessibility service does not subscribe to UI accessibility events or inspect window content.
-
-## Appearance
-
-Cursor style, enabled cursor set, cursor color and cursor size are independent settings. Cursor tint/size are applied at runtime and previewed live in settings through the same shared vector renderer. Every cursor gets a thin inverse-RGB outline for visibility on mixed backgrounds. The settings Activity uses resource-qualified light/dark platform themes (`values` / `values-night`).
-
-
-## Gesture cancellation
-
-A cancelled synthetic gesture is not immediately restarted in a loop. The controller clears the active stroke and waits for the next physical movement before lazily starting a new continued stroke. This avoids fighting real touch input, another accessibility service or SystemUI and prevents cancellation retry loops.
+External broadcast control is component-disabled by default and is enabled only by the user.

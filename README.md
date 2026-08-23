@@ -1,56 +1,53 @@
 # KeyMouse
 
-A lightweight keyboard / D-pad mouse and touch layer for Android 8+.
+Keyboard / D-pad mouse for Android 8+.
 
-- Package: `ru.vasys.keymouse`
-- Current version: **0.4.1**
-- Minimum Android: **8.0 / API 26**
-- Target SDK: **35**
-- No AndroidX, network permission, analytics or ads
+KeyMouse turns hardware keys into a real touch cursor: movement, click-and-hold, drag and continuous scrolling. The cursor is hidden until you hold the configured **Mouse key**.
 
-## What it does
+## Features
 
-- 8-direction cursor movement with configurable hardware bindings; physical D-pad directions stay stable when Android rotates key codes in landscape;
-- real touch **DOWN / MOVE / UP** for click-hold and drag;
-- continuous Scroll mode using Android continued gesture strokes instead of repeated swipes;
-- long **Mouse key** press shows/hides the cursor;
-- short Mouse-key press while visible switches **Normal / Scroll**;
-- optional screen-edge wrapping;
-- configurable cursor set, default cursor, color and size, with a thin inverse-color outline;
-- automatic light / dark settings UI;
-- optional broadcast Intent control for Key Mapper, Tasker, Automate or ADB.
+- 8-direction movement and fully configurable bindings
+- real touch DOWN / MOVE / UP for hold and drag
+- continuous Scroll mode with Android continued gesture strokes
+- short Mouse-key press switches Normal / Scroll while the cursor is visible
+- optional edge wrapping
+- configurable cursor style, color and size
+- separate portrait / landscape direction inversion
+- optional landscape control rotation with the display
+- system light / dark theme
+- optional broadcast control for Key Mapper, Tasker, Automate or ADB
+- no network permission, analytics or ads
 
-The cursor starts hidden. When hidden, bound D-pad keys pass through normally. While the cursor is visible, movement/click/cursor-switch keys are consumed so Android focus does not move at the same time. The Mouse key itself remains pass-through.
+Package: `ru.vasys.keymouse`
+
+Minimum Android: 8.0 / API 26
 
 ## Setup
 
-1. Install the APK.
-2. Open **KeyMouse** and tap **Open Accessibility settings**.
-3. Enable **KeyMouse input service**.
-4. Bind a **Mouse key** and any non-default directions you need.
-5. Hold the Mouse key to show the cursor.
+1. Install KeyMouse.
+2. Open **Accessibility settings** from the app and enable **KeyMouse input service**.
+3. Bind **Mouse key** and any directions your device does not report as the standard D-pad.
+4. Hold Mouse key to show or hide the cursor.
 
-Default bindings are D-pad Up / Right / Down / Left and D-pad Center. Diagonals, Mouse key and Cursor switch start unbound.
+When the cursor is hidden, keys pass through normally. While it is visible, movement/click/cursor-switch keys are consumed so Android focus does not move at the same time. Mouse key itself stays pass-through.
 
-## Cursor and touch behavior
+## Direction behavior
 
-The visible cursor and injected touch use the same logical screen coordinate. The overlay exists only while mouse mode is visible.
+Hardware bindings are matched as physical keys first. Android-rotated D-pad key codes are normalized so the default mapping stays stable after rotation.
 
-A held click or Scroll mode uses `StrokeDescription(..., willContinue=true)` and `continueStroke()`, so movement remains one continued synthetic finger rather than a stream of independent swipes. If Android cancels a synthetic gesture, KeyMouse yields and restarts lazily on the next physical movement instead of entering a retry loop.
+In settings you can additionally:
 
-## Hardware-key compatibility
+- **Rotate controls with screen in landscape** — physical Up rotates into the screen direction after the device is turned;
+- invert left/right separately in portrait and landscape;
+- invert up/down separately in portrait and landscape.
 
-KeyMouse requests Android's accessibility key-filter capability so it can observe hardware keys before applications.
-
-Android allows only one enabled Accessibility service to own key-event filtering at a time. If another accessibility remapper owns that stream, KeyMouse may not receive direct hardware bindings. Normal applications still receive keys that KeyMouse returns unconsumed.
-
-For remapper-based setups, KeyMouse also provides an optional external Intent backend.
+Inversion is applied after landscape rotation.
 
 ## External control
 
-External control is **disabled by default**. Enable **Allow external control (Key Mapper / Tasker)** in KeyMouse first. When disabled, the exported receiver component itself is disabled.
+External broadcasts are disabled until **Allow external control** is enabled in KeyMouse.
 
-Show / hide the mouse:
+Show / hide:
 
 ```sh
 adb shell am broadcast \
@@ -58,44 +55,54 @@ adb shell am broadcast \
   -n ru.vasys.keymouse/.input.ExternalTriggerReceiver
 ```
 
-Other actions include:
-
-```text
-ru.vasys.keymouse.action.MODE_TOGGLE
-ru.vasys.keymouse.action.MOUSE_KEY_SHORT
-ru.vasys.keymouse.action.MOUSE_KEY_LONG
-ru.vasys.keymouse.action.MOUSE_KEY_DOWN
-ru.vasys.keymouse.action.MOUSE_KEY_UP
-ru.vasys.keymouse.action.CURSOR_NEXT
-ru.vasys.keymouse.action.LEFT_DOWN
-ru.vasys.keymouse.action.LEFT_UP
-ru.vasys.keymouse.action.MOVE_UP
-... MOVE_UP_RIGHT / MOVE_RIGHT / MOVE_DOWN_RIGHT / etc.
-```
-
-Continuous external movement can use `ru.vasys.keymouse.input.DOWN` / `UP` with the string extra `key=MOVE_LEFT`, `MOVE_UP_RIGHT`, etc.
-
-## Runtime / battery behavior
-
-KeyMouse is event-driven while idle:
-
-- no wakelocks;
-- no background worker threads;
-- no polling timers;
-- no UI-tree inspection or accessibility-event subscription;
-- no network access;
-- no hidden overlay window.
-
-The movement ticker runs only while a movement key is physically held. Pointer bounds come from the actual laid-out accessibility overlay viewport. This keeps cursor and touch coordinates aligned across portrait/landscape layouts and OEM system-bar insets.
+Other actions include `MODE_TOGGLE`, `CURSOR_NEXT`, `LEFT_DOWN`, `LEFT_UP` and `MOVE_*`.
 
 ## Build
+
+Requires JDK 17 and Android SDK 36.
 
 ```sh
 ./gradlew :app:assembleDebug
 ```
 
-Requires JDK 17+ and Android SDK 35. The repository pins Gradle 8.9 through the wrapper. GitHub Actions builds debug/release variants and runs Android lint on every push / pull request.
+### Signed release APK
 
-Cursor assets derived from Pictogrammers Material Design Icons are documented in `THIRD_PARTY_NOTICES.md`.
+Create the signing key once and keep it safe. The same key is required for future updates:
 
-Project license: MIT. Third-party cursor assets keep their own licenses in `THIRD_PARTY_NOTICES.md`. See `PRIVACY.md` for data handling.
+```sh
+keytool -genkeypair -v \
+  -keystore keymouse-release.jks \
+  -alias keymouse \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Copy `keystore.properties.example` to `keystore.properties` and fill in the real path/passwords:
+
+```properties
+storeFile=/absolute/path/to/keymouse-release.jks
+storePassword=...
+keyAlias=keymouse
+keyPassword=...
+```
+
+Then build. If `keystore.properties` is absent, Gradle still produces an unsigned release for CI checks; with the file present, the APK is signed automatically.
+
+```sh
+./gradlew clean :app:assembleRelease
+```
+
+The signed APK is written to:
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+`keystore.properties`, `*.jks` and `*.keystore` are ignored by Git. Do not commit the private signing key.
+
+## Notes
+
+Android allows only one enabled Accessibility service to own hardware key filtering at a time. If another accessibility remapper owns that stream, use KeyMouse's external broadcast backend instead.
+
+Cursor artwork derived from Pictogrammers Material Design Icons is listed in `THIRD_PARTY_NOTICES.md`.
+
+KeyMouse itself is MIT licensed. See `PRIVACY.md` for data handling.

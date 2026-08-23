@@ -1,0 +1,143 @@
+package dev.keymouse.service;
+
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
+import android.os.Handler;
+import android.os.Looper;
+
+/**
+ * Holds one virtual pointer down across multiple dispatchGesture calls.
+ * API 26+ StrokeDescription.continueStroke() is the important bit: movement
+ * does not become a sequence of independent swipes.
+ */
+public final class ContinuousTouchController {
+    private final AccessibilityService service;
+    private final Handler main = new Handler(Looper.getMainLooper());
+
+    private GestureDescription.StrokeDescription stroke;
+    private boolean busy;
+    private boolean requestedDown;
+    private float currentX;
+    private float currentY;
+    private float targetX;
+    private float targetY;
+    private float dispatchedEndX;
+    private float dispatchedEndY;
+
+    public ContinuousTouchController(AccessibilityService service) {
+        this.service = service;
+    }
+
+    public void press(float x, float y) {
+        runOnMain(() -> {
+            targetX = x;
+            targetY = y;
+            if (requestedDown) return;
+            requestedDown = true;
+            if (!busy && stroke == null) dispatchStart(x, y);
+        });
+    }
+
+    public void moveTo(float x, float y) {
+        runOnMain(() -> {
+            targetX = x;
+            targetY = y;
+            if (!requestedDown || busy || stroke == null) return;
+            if (distance(currentX, currentY, targetX, targetY) >= 0.5f) dispatchMove();
+        });
+    }
+
+    public void release() {
+        runOnMain(() -> {
+            requestedDown = false;
+            if (!busy && stroke != null) dispatchRelease();
+        });
+    }
+
+    public boolean isRequestedDown() {
+        return requestedDown;
+    }
+
+    private void dispatchStart(float x, float y) {
+        Path p = new Path();
+        p.moveTo(x, y);
+        GestureDescription.StrokeDescription next =
+                new GestureDescription.StrokeDescription(p, 0, 8, true);
+        currentX = x;
+        currentY = y;
+        dispatchedEndX = x;
+        dispatchedEndY = y;
+        dispatch(next, true);
+    }
+
+    private void dispatchMove() {
+        float endX = targetX;
+        float endY = targetY;
+        Path p = new Path();
+        p.moveTo(currentX, currentY);
+        p.lineTo(endX, endY);
+        long duration = Math.max(8, Math.min(32,
+                Math.round(distance(currentX, currentY, endX, endY) / 2f)));
+        GestureDescription.StrokeDescription next =
+                stroke.continueStroke(p, 0, duration, true);
+        dispatchedEndX = endX;
+        dispatchedEndY = endY;
+        dispatch(next, true);
+    }
+
+    private void dispatchRelease() {
+        Path p = new Path();
+        p.moveTo(currentX, currentY);
+        GestureDescription.StrokeDescription next =
+                stroke.continueStroke(p, 0, 1, false);
+        dispatchedEndX = currentX;
+        dispatchedEndY = currentY;
+        dispatch(next, false);
+    }
+
+    private void dispatch(GestureDescription.StrokeDescription next, boolean continues) {
+        busy = true;
+        stroke = next;
+        GestureDescription gesture = new GestureDescription.Builder().addStroke(next).build();
+        boolean accepted = service.dispatchGesture(gesture,
+                new AccessibilityService.GestureResultCallback() {
+                    @Override
+                    public void onCompleted(GestureDescription gestureDescription) {
+                        busy = false;
+                        currentX = dispatchedEndX;
+                        currentY = dispatchedEndY;
+                        if (!continues) {
+                            stroke = null;
+                            return;
+                        }
+                        if (!requestedDown) {
+                            dispatchRelease();
+                        } else if (distance(currentX, currentY, targetX, targetY) >= 0.5f) {
+                            dispatchMove();
+                        }
+                    }
+
+                    @Override
+                    public void onCancelled(GestureDescription gestureDescription) {
+                        busy = false;
+                        stroke = null;
+                        if (requestedDown) dispatchStart(targetX, targetY);
+                    }
+                }, main);
+        if (!accepted) {
+            busy = false;
+            stroke = null;
+        }
+    }
+
+    private void runOnMain(Runnable r) {
+        if (Looper.myLooper() == Looper.getMainLooper()) r.run(); else main.post(r);
+    }
+
+    private static float distance(float x1, float y1, float x2, float y2) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        return (float) Math.sqrt(dx * dx + dy * dy);
+    }
+}

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">KeyMouse</string>
+    <string name="service_name">KeyMouse input service</string>
+    <string name="service_description">Keyboard and remote driven mouse/touch layer.</string>
+</resources>

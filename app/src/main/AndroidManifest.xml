@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.MouseAccessibilityService"
+            android:exported="true"
+            android:label="@string/service_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service" />
+        </service>
+
+        <receiver
+            android:name=".input.ExternalTriggerReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.keymouse.input.DOWN" />
+                <action android:name="dev.keymouse.input.UP" />
+                <action android:name="dev.keymouse.input.PULSE" />
+                <action android:name="dev.keymouse.action.CURSOR_TOGGLE" />
+                <action android:name="dev.keymouse.action.TOUCH_TOGGLE" />
+                <action android:name="dev.keymouse.action.LEFT_DOWN" />
+                <action android:name="dev.keymouse.action.LEFT_UP" />
+                <action android:name="dev.keymouse.action.RIGHT_CLICK" />
+                <action android:name="dev.keymouse.action.MOVE_UP" />
+                <action android:name="dev.keymouse.action.MOVE_UP_RIGHT" />
+                <action android:name="dev.keymouse.action.MOVE_RIGHT" />
+                <action android:name="dev.keymouse.action.MOVE_DOWN_RIGHT" />
+                <action android:name="dev.keymouse.action.MOVE_DOWN" />
+                <action android:name="dev.keymouse.action.MOVE_DOWN_LEFT" />
+                <action android:name="dev.keymouse.action.MOVE_LEFT" />
+                <action android:name="dev.keymouse.action.MOVE_UP_LEFT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

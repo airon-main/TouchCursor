@@ -8,7 +8,10 @@ public enum CursorStyle {
     CROSSHAIR("CROSSHAIR", "Crosshair", R.drawable.cursor_crosshair, 0.50f, 0.50f),
     TARGET("TARGET", "Target", R.drawable.cursor_target, 0.50f, 0.50f),
     RING("RING", "Ring", R.drawable.cursor_ring, 0.50f, 0.50f),
-    PLUS("PLUS", "Plus", R.drawable.cursor_plus, 0.50f, 0.50f);
+    PLUS("PLUS", "Plus", R.drawable.cursor_plus, 0.50f, 0.50f),
+    CORNERS("CORNERS", "Corner brackets", R.drawable.cursor_corners, 0.50f, 0.50f),
+    FOCUS("FOCUS", "Focus", R.drawable.cursor_focus, 0.50f, 0.50f),
+    INWARD_CORNERS("INWARD_CORNERS", "Inward corners", R.drawable.cursor_inward_corners, 0.50f, 0.50f);
 
     public final String id;
     public final String label;

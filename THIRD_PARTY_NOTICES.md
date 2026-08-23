@@ -2,7 +2,7 @@
 
 ## Pictogrammers Material Design Icons
 
-Cursor vector assets are extracted from the Material Design Icons 7.4.47 font and converted to Android VectorDrawable paths without changing their geometry.
+Stock cursor vector assets come from Pictogrammers Material Design Icons and are converted to Android VectorDrawable paths without changing their geometry. The KeyMouse-specific Inward corners reticle is original project artwork and is covered by the project license.
 
 Used glyphs:
 
@@ -12,6 +12,9 @@ Used glyphs:
 - `target`
 - `circle-outline`
 - `plus`
+- `crop-free`
+- `image-filter-center-focus`
+- `selection-drag`
 
 Project: https://pictogrammers.com/library/mdi/
 

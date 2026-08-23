@@ -58,13 +58,20 @@ public final class MouseAccessibilityService extends AccessibilityService {
         runningInstance = this;
         settings = new Settings(this);
         bindings = settings.allBindings();
-        pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges());
+        pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges(), settings.cursorColor(), settings.cursorSizeDp());
         enableKeyObservation();
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // No view-tree scraping. Accessibility is used only for gestures and key observation.
+        // We never inspect the view tree. The foreground package name is used only so the
+        // accessibility overlay can preserve the device's legacy policy_control immersive-nav
+        // behavior while the mouse is visible.
+        if (pointer == null || event == null || event.getPackageName() == null) return;
+        if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        String pkg = event.getPackageName().toString();
+        if ("com.android.systemui".equals(pkg)) return;
+        pointer.setForegroundPackage(pkg);
     }
 
     @Override
@@ -175,6 +182,8 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (pointer != null) {
                 pointer.setCursorStyle(settings.cursorStyle());
                 pointer.setWrapEdges(settings.wrapEdges());
+                pointer.setCursorColor(settings.cursorColor());
+                pointer.setCursorSizeDp(settings.cursorSizeDp());
             }
             enableKeyObservation();
         });

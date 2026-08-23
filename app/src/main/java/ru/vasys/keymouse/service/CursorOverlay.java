@@ -2,15 +2,20 @@ package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import ru.vasys.keymouse.core.CursorColor;
 import ru.vasys.keymouse.core.CursorStyle;
 
 /**
@@ -18,12 +23,13 @@ import ru.vasys.keymouse.core.CursorStyle;
  *
  * The logical hotspot (x/y) is the only pointer coordinate in the app. The
  * cursor image is rendered around that exact coordinate and Accessibility
- * gestures use the same value directly. Moving the child view instead of the
- * WindowManager window avoids asynchronous/clamped window coordinates drifting
- * away from the gesture coordinate, especially at display edges.
+ * gestures use the same value directly.
+ *
+ * The overlay is attached only while the mouse is visible. This avoids a
+ * hidden TYPE_ACCESSIBILITY_OVERLAY becoming the top policy window and
+ * interfering with an app's legacy immersive-navigation configuration.
  */
 public final class CursorOverlay {
-    private static final int SIZE_DP = 42;
     private static final int IMAGE_PADDING_DP = 2;
 
     private final AccessibilityService service;
@@ -33,7 +39,9 @@ public final class CursorOverlay {
     private final ImageView shadow;
     private final ImageView foreground;
     private final WindowManager.LayoutParams params;
-    private final int cursorSizePx;
+    private final ImmersiveNavigationPolicy immersivePolicy;
+    private final ContentObserver policyObserver;
+    private int cursorSizePx;
     private final int imagePaddingPx;
 
     private int screenWidth;
@@ -44,11 +52,25 @@ public final class CursorOverlay {
     private boolean added;
     private boolean wrapEdges;
     private CursorStyle style;
+    private CursorColor color;
+    private String foregroundPackage;
 
-    public CursorOverlay(AccessibilityService service, CursorStyle style, boolean wrapEdges) {
+    public CursorOverlay(AccessibilityService service, CursorStyle style, boolean wrapEdges, CursorColor color, int cursorSizeDp) {
         this.service = service;
         this.wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
-        this.cursorSizePx = dp(SIZE_DP);
+        this.immersivePolicy = new ImmersiveNavigationPolicy(service);
+        this.policyObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                if (visible) applySystemUiPolicy();
+            }
+        };
+        try {
+            service.getContentResolver().registerContentObserver(
+                    Settings.Global.getUriFor("policy_control"), false, policyObserver);
+        } catch (RuntimeException ignored) {
+        }
+        this.cursorSizePx = dp(cursorSizeDp);
         this.imagePaddingPx = dp(IMAGE_PADDING_DP);
 
         root = new FrameLayout(service);
@@ -65,8 +87,6 @@ public final class CursorOverlay {
         foreground = image(service, imagePaddingPx);
         shadow.setScaleX(1.13f);
         shadow.setScaleY(1.13f);
-        shadow.setColorFilter(Color.BLACK);
-        foreground.setColorFilter(Color.WHITE);
         cursor.addView(shadow, new FrameLayout.LayoutParams(-1, -1));
         cursor.addView(foreground, new FrameLayout.LayoutParams(-1, -1));
 
@@ -76,29 +96,33 @@ public final class CursorOverlay {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.LEFT;
 
+        root.setOnSystemUiVisibilityChangeListener(visibility -> {
+            if (!visible || !immersivePolicy.shouldHideNavigationFor(foregroundPackage)) return;
+            root.removeCallbacks(reapplyImmersive);
+            root.postDelayed(reapplyImmersive, 80);
+        });
+
         this.wrapEdges = wrapEdges;
+        this.color = color == null ? CursorColor.WHITE : color;
         updateScreenBounds();
         x = (screenWidth - 1) / 2f;
         y = (screenHeight - 1) / 2f;
         setStyle(style);
+        applyTint();
         applyCursorPosition();
-        root.setVisibility(View.GONE);
-        wm.addView(root, params);
-        added = true;
     }
 
     public void destroy() {
-        if (!added) return;
+        removeOverlayWindow();
+        visible = false;
         try {
-            wm.removeView(root);
+            service.getContentResolver().unregisterContentObserver(policyObserver);
         } catch (RuntimeException ignored) {
         }
-        added = false;
     }
 
     public void updateScreenBounds() {
@@ -130,13 +154,18 @@ public final class CursorOverlay {
     }
 
     public void setVisible(boolean value) {
+        if (visible == value) return;
         visible = value;
-        root.setVisibility(value ? View.VISIBLE : View.GONE);
         if (value) {
             updateScreenBounds();
             x = normalizeForCurrentMode(x, screenWidth);
             y = normalizeForCurrentMode(y, screenHeight);
             applyCursorPosition();
+            applySystemUiPolicy();
+            addOverlayWindow();
+            applySystemUiPolicy();
+        } else {
+            removeOverlayWindow();
         }
     }
 
@@ -161,6 +190,22 @@ public final class CursorOverlay {
         applyCursorPosition();
     }
 
+    public void setCursorColor(CursorColor color) {
+        this.color = color == null ? CursorColor.WHITE : color;
+        applyTint();
+    }
+
+    public void setCursorSizeDp(int sizeDp) {
+        int next = dp(sizeDp);
+        if (next == cursorSizePx) return;
+        cursorSizePx = next;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) cursor.getLayoutParams();
+        lp.width = cursorSizePx;
+        lp.height = cursorSizePx;
+        cursor.setLayoutParams(lp);
+        applyCursorPosition();
+    }
+
     public void setWrapEdges(boolean enabled) {
         wrapEdges = enabled;
         updateScreenBounds();
@@ -169,13 +214,75 @@ public final class CursorOverlay {
         applyCursorPosition();
     }
 
+    public void setForegroundPackage(String packageName) {
+        foregroundPackage = packageName;
+        if (visible) applySystemUiPolicy();
+    }
+
     public void setScrollMode(boolean scrollMode) {
-        foreground.setColorFilter(scrollMode ? 0xffffc107 : Color.WHITE);
+        // Keep the user-selected cursor color in every mode. Runtime mode is
+        // already surfaced through a Toast when Normal/Scroll changes.
+        foreground.setAlpha(scrollMode ? 0.80f : 1.0f);
+    }
+
+    private void addOverlayWindow() {
+        if (added) return;
+        try {
+            wm.addView(root, params);
+            added = true;
+        } catch (RuntimeException ignored) {
+            added = false;
+        }
+    }
+
+    private void removeOverlayWindow() {
+        root.removeCallbacks(reapplyImmersive);
+        if (!added) return;
+        try {
+            wm.removeViewImmediate(root);
+        } catch (RuntimeException ignored) {
+        }
+        added = false;
+    }
+
+    private final Runnable reapplyImmersive = new Runnable() {
+        @Override
+        public void run() {
+            if (visible) applySystemUiPolicy();
+        }
+    };
+
+    @SuppressWarnings("deprecation")
+    private void applySystemUiPolicy() {
+        boolean hideNavigation = immersivePolicy.shouldHideNavigationFor(foregroundPackage);
+        int systemUi = 0;
+        if (hideNavigation) {
+            // Mirror AOSP PolicyControl for immersive.navigation. In particular, do NOT add
+            // LAYOUT_STABLE: Android 8.x PolicyControl explicitly clears it here.
+            systemUi = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            params.flags &= ~WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
+        }
+        params.systemUiVisibility = systemUi;
+        root.setSystemUiVisibility(systemUi);
+        if (added) {
+            try {
+                wm.updateViewLayout(root, params);
+            } catch (RuntimeException ignored) {
+            }
+        }
     }
 
     private void applyCursorPosition() {
         cursor.setTranslationX(x - hotspotOffsetX());
         cursor.setTranslationY(y - hotspotOffsetY());
+    }
+
+    private void applyTint() {
+        int foregroundColor = color == null ? Color.WHITE : color.argb;
+        foreground.setColorFilter(foregroundColor);
+        shadow.setColorFilter(isLight(foregroundColor) ? Color.BLACK : Color.WHITE);
     }
 
     private float hotspotOffsetX() {
@@ -203,6 +310,14 @@ public final class CursorOverlay {
 
     private int dp(int value) {
         return Math.round(value * service.getResources().getDisplayMetrics().density);
+    }
+
+    private static boolean isLight(int argb) {
+        double r = Color.red(argb) / 255.0;
+        double g = Color.green(argb) / 255.0;
+        double b = Color.blue(argb) / 255.0;
+        double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return luminance >= 0.52;
     }
 
     private static float wrap(float value, int size) {

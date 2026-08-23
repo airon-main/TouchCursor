@@ -17,6 +17,13 @@ public final class Settings {
     private static final String CURSOR_ENABLED = "cursor_enabled";
     private static final String SPEED = "speed";
     private static final String WRAP_EDGES = "wrap_edges";
+    private static final String CURSOR_COLOR = "cursor_color";
+    private static final String CURSOR_SET_VERSION = "cursor_set_version";
+    private static final String CURSOR_SIZE = "cursor_size_dp";
+    private static final int CURRENT_CURSOR_SET_VERSION = 3;
+    public static final int DEFAULT_CURSOR_SIZE_DP = 42;
+    public static final int MIN_CURSOR_SIZE_DP = 24;
+    public static final int MAX_CURSOR_SIZE_DP = 72;
 
     private final SharedPreferences prefs;
 
@@ -48,6 +55,27 @@ public final class Settings {
             LinkedHashSet<String> all = new LinkedHashSet<>();
             for (CursorStyle style : CursorStyle.values()) all.add(style.id);
             e.putStringSet(CURSOR_ENABLED, all);
+            changed = true;
+        }
+        if (!prefs.contains(CURSOR_COLOR)) {
+            e.putString(CURSOR_COLOR, CursorColor.WHITE.id);
+            changed = true;
+        }
+        if (!prefs.contains(CURSOR_SIZE)) {
+            e.putInt(CURSOR_SIZE, DEFAULT_CURSOR_SIZE_DP);
+            changed = true;
+        }
+        if (prefs.getInt(CURSOR_SET_VERSION, 0) < CURRENT_CURSOR_SET_VERSION) {
+            LinkedHashSet<String> enabled = new LinkedHashSet<>();
+            Set<String> stored = prefs.getStringSet(CURSOR_ENABLED, null);
+            if (stored != null) enabled.addAll(stored);
+            else for (CursorStyle style : CursorStyle.values()) enabled.add(style.id);
+            LinkedHashSet<String> valid = new LinkedHashSet<>();
+            for (CursorStyle style : CursorStyle.values()) {
+                if (enabled.contains(style.id) || style == CursorStyle.INWARD_CORNERS) valid.add(style.id);
+            }
+            e.putStringSet(CURSOR_ENABLED, valid);
+            e.putInt(CURSOR_SET_VERSION, CURRENT_CURSOR_SET_VERSION);
             changed = true;
         }
         if (changed) e.apply();
@@ -175,6 +203,23 @@ public final class Settings {
 
     public void setSpeedPxPerTick(int value) {
         prefs.edit().putInt(SPEED, value).apply();
+    }
+
+    public CursorColor cursorColor() {
+        return CursorColor.fromId(prefs.getString(CURSOR_COLOR, CursorColor.WHITE.id));
+    }
+
+    public void setCursorColor(CursorColor color) {
+        prefs.edit().putString(CURSOR_COLOR, color.id).apply();
+    }
+
+    public int cursorSizeDp() {
+        return Math.max(MIN_CURSOR_SIZE_DP, Math.min(MAX_CURSOR_SIZE_DP, prefs.getInt(CURSOR_SIZE, DEFAULT_CURSOR_SIZE_DP)));
+    }
+
+    public void setCursorSizeDp(int value) {
+        int safe = Math.max(MIN_CURSOR_SIZE_DP, Math.min(MAX_CURSOR_SIZE_DP, value));
+        prefs.edit().putInt(CURSOR_SIZE, safe).apply();
     }
 
     public boolean wrapEdges() {

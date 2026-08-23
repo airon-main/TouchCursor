@@ -2,6 +2,8 @@ package ru.vasys.keymouse.ui;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -9,6 +11,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.GridLayout;
@@ -17,6 +21,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,15 +32,13 @@ import java.util.Map;
 import ru.vasys.keymouse.R;
 import ru.vasys.keymouse.core.Binding;
 import ru.vasys.keymouse.core.BindingState;
+import ru.vasys.keymouse.core.CursorColor;
 import ru.vasys.keymouse.core.CursorStyle;
 import ru.vasys.keymouse.core.MouseAction;
 import ru.vasys.keymouse.service.MouseAccessibilityService;
 
 public final class MainActivity extends Activity {
     private static final int[] SPEEDS = {5, 8, 10, 14, 20};
-    private static final int COLOR_NONE = 0xff777777;
-    private static final int COLOR_DEFAULT = 0xff2e7d32;
-    private static final int COLOR_CUSTOM = 0xff1565c0;
 
     private ru.vasys.keymouse.core.Settings settings;
     private MouseAction captureAction;
@@ -43,15 +47,21 @@ public final class MainActivity extends Activity {
     private Button triggerButton;
     private Button cursorSwitchButton;
     private Button speedButton;
+    private ImageView cursorAppearancePreview;
     private CheckBox wrapEdgesCheck;
+    private Spinner cursorColorSpinner;
+    private TextView cursorSizeLabel;
+    private SeekBar cursorSizeSeek;
     private Button cursorSetToggleButton;
     private LinearLayout cursorListContainer;
     private boolean cursorSetExpanded;
     private boolean refreshingCursorRows;
+    private boolean refreshingCursorColor;
 
     private final Map<MouseAction, ImageButton> bindingButtons = new EnumMap<>(MouseAction.class);
     private final Map<CursorStyle, CheckBox> cursorChecks = new EnumMap<>(CursorStyle.class);
     private final Map<CursorStyle, RadioButton> cursorDefaults = new EnumMap<>(CursorStyle.class);
+    private final Map<CursorStyle, ImageView> cursorPreviews = new EnumMap<>(CursorStyle.class);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,7 +132,13 @@ public final class MainActivity extends Activity {
         root.addView(accessibility);
 
         root.addView(sectionHeading("Pointer"));
-        root.addView(sectionDescription("Choose movement speed and whether the cursor wraps to the opposite screen edge."));
+        root.addView(sectionDescription("Tune cursor movement and appearance. Preview updates immediately."));
+
+        cursorAppearancePreview = new ImageView(this);
+        cursorAppearancePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams appearancePreviewParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        appearancePreviewParams.gravity = Gravity.CENTER_HORIZONTAL;
+        root.addView(cursorAppearancePreview, appearancePreviewParams);
 
         speedButton = button("");
         speedButton.setOnClickListener(v -> {
@@ -147,6 +163,63 @@ public final class MainActivity extends Activity {
             notifyService();
         });
         root.addView(wrapEdgesCheck);
+
+        TextView colorLabel = text("Cursor color", 14);
+        colorLabel.setTypeface(null, 1);
+        colorLabel.setPadding(0, dp(8), 0, dp(2));
+        root.addView(colorLabel);
+
+        cursorColorSpinner = new Spinner(this);
+        String[] colorLabels = new String[CursorColor.values().length];
+        for (int i = 0; i < CursorColor.values().length; i++) colorLabels[i] = CursorColor.values()[i].label;
+        ArrayAdapter<String> colorAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, colorLabels);
+        colorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        cursorColorSpinner.setAdapter(colorAdapter);
+        CursorColor initialColor = settings.cursorColor();
+        int initialColorPosition = 0;
+        for (int i = 0; i < CursorColor.values().length; i++) {
+            if (CursorColor.values()[i] == initialColor) initialColorPosition = i;
+        }
+        cursorColorSpinner.setSelection(initialColorPosition, false);
+        cursorColorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (refreshingCursorColor) return;
+                CursorColor selected = CursorColor.values()[position];
+                if (selected == settings.cursorColor()) return;
+                settings.setCursorColor(selected);
+                refreshCursorPreviews();
+                notifyService();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        root.addView(cursorColorSpinner);
+
+        cursorSizeLabel = text("", 14);
+        cursorSizeLabel.setTypeface(null, 1);
+        cursorSizeLabel.setPadding(0, dp(10), 0, 0);
+        root.addView(cursorSizeLabel);
+
+        cursorSizeSeek = new SeekBar(this);
+        cursorSizeSeek.setMax(ru.vasys.keymouse.core.Settings.MAX_CURSOR_SIZE_DP - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP);
+        cursorSizeSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser) return;
+                int value = ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP + progress;
+                settings.setCursorSizeDp(value);
+                refreshCursorSize();
+                refreshCursorPreviews();
+                notifyService();
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+        root.addView(cursorSizeSeek);
 
         cursorSetToggleButton = button("");
         cursorSetToggleButton.setPadding(0, dp(8), 0, 0);
@@ -200,9 +273,9 @@ public final class MainActivity extends Activity {
         LinearLayout legend = new LinearLayout(this);
         legend.setOrientation(LinearLayout.HORIZONTAL);
         legend.setGravity(Gravity.CENTER_HORIZONTAL);
-        legend.addView(legendItem("unbound", COLOR_NONE));
-        legend.addView(legendItem("default", COLOR_DEFAULT));
-        legend.addView(legendItem("custom", COLOR_CUSTOM));
+        legend.addView(legendItem("unbound", bindingColor(BindingState.NONE)));
+        legend.addView(legendItem("default", bindingColor(BindingState.DEFAULT)));
+        legend.addView(legendItem("custom", bindingColor(BindingState.CUSTOM)));
         root.addView(legend);
 
         TextView inputNote = sectionDescription("When the mouse is hidden, bound keys pass through normally. While visible, movement, click and cursor-switch are captured so Android focus stays still. Mouse key remains pass-through.");
@@ -264,7 +337,7 @@ public final class MainActivity extends Activity {
 
         ImageView preview = new ImageView(this);
         preview.setImageResource(style.drawableRes);
-        preview.setColorFilter(Color.DKGRAY);
+        cursorPreviews.put(style, preview);
         row.addView(preview, new LinearLayout.LayoutParams(dp(38), dp(38)));
 
         CheckBox enabled = new CheckBox(this);
@@ -273,6 +346,7 @@ public final class MainActivity extends Activity {
             if (refreshingCursorRows) return;
             settings.setCursorStyleEnabled(style, isChecked);
             refreshCursorRows();
+            refreshCursorPreviews();
             notifyService();
         });
         cursorChecks.put(style, enabled);
@@ -284,6 +358,7 @@ public final class MainActivity extends Activity {
             if (refreshingCursorRows || !isChecked) return;
             settings.setCursorStyle(style);
             refreshCursorRows();
+            refreshCursorPreviews();
             notifyService();
         });
         cursorDefaults.put(style, isDefault);
@@ -336,6 +411,9 @@ public final class MainActivity extends Activity {
         refreshCursorSetVisibility();
         refreshSpeedButton();
         refreshWrapEdges();
+        refreshCursorColor();
+        refreshCursorSize();
+        refreshCursorPreviews();
     }
 
     private void refreshBindings() {
@@ -382,6 +460,46 @@ public final class MainActivity extends Activity {
         if (wrapEdgesCheck != null) wrapEdgesCheck.setChecked(settings.wrapEdges());
     }
 
+    private void refreshCursorColor() {
+        if (cursorColorSpinner == null) return;
+        CursorColor selected = settings.cursorColor();
+        CursorColor[] all = CursorColor.values();
+        int position = 0;
+        for (int i = 0; i < all.length; i++) if (all[i] == selected) position = i;
+        refreshingCursorColor = true;
+        cursorColorSpinner.setSelection(position, false);
+        refreshingCursorColor = false;
+    }
+
+    private void refreshCursorSize() {
+        if (cursorSizeLabel != null) cursorSizeLabel.setText("Cursor size: " + settings.cursorSizeDp() + " dp");
+        if (cursorSizeSeek != null) {
+            int progress = settings.cursorSizeDp() - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP;
+            cursorSizeSeek.setProgress(progress);
+        }
+    }
+
+    private void refreshCursorPreviews() {
+        int size = dp(settings.cursorSizeDp());
+        int tint = settings.cursorColor().argb;
+        if (cursorAppearancePreview != null) {
+            cursorAppearancePreview.setImageResource(settings.cursorStyle().drawableRes);
+            cursorAppearancePreview.setColorFilter(tint);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) cursorAppearancePreview.getLayoutParams();
+            lp.width = size;
+            lp.height = size;
+            cursorAppearancePreview.setLayoutParams(lp);
+        }
+        for (Map.Entry<CursorStyle, ImageView> entry : cursorPreviews.entrySet()) {
+            ImageView preview = entry.getValue();
+            preview.setColorFilter(tint);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) preview.getLayoutParams();
+            lp.width = size;
+            lp.height = size;
+            preview.setLayoutParams(lp);
+        }
+    }
+
     private void notifyService() {
         MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
         if (service != null) service.reloadSettings();
@@ -416,11 +534,13 @@ public final class MainActivity extends Activity {
     }
 
     private int bindingColor(BindingState state) {
+        boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
         switch (state) {
-            case DEFAULT: return COLOR_DEFAULT;
-            case CUSTOM: return COLOR_CUSTOM;
+            case DEFAULT: return night ? 0xff81c784 : 0xff2e7d32;
+            case CUSTOM: return night ? 0xff64b5f6 : 0xff1565c0;
             case NONE:
-            default: return COLOR_NONE;
+            default: return night ? 0xffb0bec5 : 0xff777777;
         }
     }
 
@@ -439,7 +559,7 @@ public final class MainActivity extends Activity {
 
     private TextView sectionDescription(String value) {
         TextView t = text(value, 12);
-        t.setTextColor(Color.DKGRAY);
+        t.setTextColor(themeColor(android.R.attr.textColorSecondary, Color.DKGRAY));
         t.setPadding(0, 0, 0, dp(6));
         return t;
     }
@@ -463,6 +583,15 @@ public final class MainActivity extends Activity {
         t.setTextSize(sp);
         t.setPadding(0, dp(4), 0, dp(4));
         return t;
+    }
+
+    private int themeColor(int attr, int fallback) {
+        TypedArray a = obtainStyledAttributes(new int[]{attr});
+        try {
+            return a.getColor(0, fallback);
+        } finally {
+            a.recycle();
+        }
     }
 
     private int dp(int value) {

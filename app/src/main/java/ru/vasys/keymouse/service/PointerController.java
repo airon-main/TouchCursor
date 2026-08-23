@@ -2,6 +2,7 @@ package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 
+import ru.vasys.keymouse.core.CursorColor;
 import ru.vasys.keymouse.core.CursorStyle;
 
 public final class PointerController {
@@ -11,8 +12,8 @@ public final class PointerController {
     private boolean leftHeld;
     private boolean scrollMode;
 
-    public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges) {
-        overlay = new CursorOverlay(service, cursorStyle, wrapEdges);
+    public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges, CursorColor cursorColor, int cursorSizeDp) {
+        overlay = new CursorOverlay(service, cursorStyle, wrapEdges, cursorColor, cursorSizeDp);
         touch = new ContinuousTouchController(service);
     }
 
@@ -79,6 +80,18 @@ public final class PointerController {
 
     public void setWrapEdges(boolean enabled) {
         overlay.setWrapEdges(enabled);
+    }
+
+    public void setCursorColor(CursorColor color) {
+        overlay.setCursorColor(color);
+    }
+
+    public void setCursorSizeDp(int sizeDp) {
+        overlay.setCursorSizeDp(sizeDp);
+    }
+
+    public void setForegroundPackage(String packageName) {
+        overlay.setForegroundPackage(packageName);
     }
 
     public boolean isScrollMode() {

@@ -1,4 +1,4 @@
-package dev.keymouse.core;
+package ru.vasys.keymouse.core;
 
 public enum MouseAction {
     MOVE_UP(0, -1, true),
@@ -10,7 +10,8 @@ public enum MouseAction {
     MOVE_LEFT(-1, 0, true),
     MOVE_UP_LEFT(-1, -1, true),
     LEFT_BUTTON(0, 0, false),
-    TRIGGER(0, 0, false);
+    TRIGGER(0, 0, false),
+    CURSOR_NEXT(0, 0, false);
 
     public final int dx;
     public final int dy;

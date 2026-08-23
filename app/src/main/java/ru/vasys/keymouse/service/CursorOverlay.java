@@ -1,4 +1,4 @@
-package dev.keymouse.service;
+package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
@@ -11,7 +11,7 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
-import dev.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.core.CursorStyle;
 
 public final class CursorOverlay {
     private static final int SIZE_DP = 42;

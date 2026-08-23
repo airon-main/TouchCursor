@@ -1,4 +1,4 @@
-package dev.keymouse.core;
+package ru.vasys.keymouse.core;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -13,7 +13,6 @@ public final class Settings {
     private static final String PREFS = "keymouse";
     private static final String PREFIX_KEY = "binding.key.";
     private static final String PREFIX_SCAN = "binding.scan.";
-    private static final String CAPTURE_KEYS = "capture_keys";
     private static final String CURSOR_STYLE = "cursor_style";
     private static final String CURSOR_ENABLED = "cursor_enabled";
     private static final String SPEED = "speed";
@@ -90,22 +89,10 @@ public final class Settings {
         setBinding(action, -1, 0);
     }
 
-    public void resetBinding(MouseAction action) {
-        setBinding(action, defaultKeyCode(action), 0);
-    }
-
     public Map<MouseAction, Binding> allBindings() {
         Map<MouseAction, Binding> result = new EnumMap<>(MouseAction.class);
         for (MouseAction action : MouseAction.values()) result.put(action, getBinding(action));
         return result;
-    }
-
-    public boolean captureHardwareKeys() {
-        return prefs.getBoolean(CAPTURE_KEYS, true);
-    }
-
-    public void setCaptureHardwareKeys(boolean value) {
-        prefs.edit().putBoolean(CAPTURE_KEYS, value).apply();
     }
 
     public CursorStyle cursorStyle() {

@@ -1,4 +1,4 @@
-package dev.keymouse.core;
+package ru.vasys.keymouse.core;
 
 import android.view.KeyEvent;
 

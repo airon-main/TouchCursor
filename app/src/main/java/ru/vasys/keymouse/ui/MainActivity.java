@@ -1,4 +1,4 @@
-package dev.keymouse.ui;
+package ru.vasys.keymouse.ui;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -12,6 +12,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.GridLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -22,11 +23,12 @@ import android.widget.Toast;
 import java.util.EnumMap;
 import java.util.Map;
 
-import dev.keymouse.core.Binding;
-import dev.keymouse.core.BindingState;
-import dev.keymouse.core.CursorStyle;
-import dev.keymouse.core.MouseAction;
-import dev.keymouse.service.MouseAccessibilityService;
+import ru.vasys.keymouse.R;
+import ru.vasys.keymouse.core.Binding;
+import ru.vasys.keymouse.core.BindingState;
+import ru.vasys.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.core.MouseAction;
+import ru.vasys.keymouse.service.MouseAccessibilityService;
 
 public final class MainActivity extends Activity {
     private static final int[] SPEEDS = {5, 8, 10, 14, 20};
@@ -34,47 +36,55 @@ public final class MainActivity extends Activity {
     private static final int COLOR_DEFAULT = 0xff2e7d32;
     private static final int COLOR_CUSTOM = 0xff1565c0;
 
-    private dev.keymouse.core.Settings settings;
+    private ru.vasys.keymouse.core.Settings settings;
     private MouseAction captureAction;
     private int swallowKeyCode = KeyEvent.KEYCODE_UNKNOWN;
-    private TextView status;
+    private Toast feedbackToast;
     private Button triggerButton;
-    private Button cursorCycleButton;
+    private Button cursorSwitchButton;
     private Button speedButton;
-    private CheckBox directInput;
+    private Button cursorSetToggleButton;
+    private LinearLayout cursorListContainer;
+    private boolean cursorSetExpanded;
     private boolean refreshingCursorRows;
 
-    private final Map<MouseAction, Button> bindingButtons = new EnumMap<>(MouseAction.class);
+    private final Map<MouseAction, ImageButton> bindingButtons = new EnumMap<>(MouseAction.class);
     private final Map<CursorStyle, CheckBox> cursorChecks = new EnumMap<>(CursorStyle.class);
     private final Map<CursorStyle, RadioButton> cursorDefaults = new EnumMap<>(CursorStyle.class);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        settings = new dev.keymouse.core.Settings(this);
+        settings = new ru.vasys.keymouse.core.Settings(this);
         setContentView(buildUi());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
-        if (service != null) service.setCalibrationMode(true);
         refreshAll();
     }
 
     @Override
     protected void onPause() {
-        MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
-        if (service != null) service.setCalibrationMode(false);
+        setServiceCalibration(false);
         captureAction = null;
+        swallowKeyCode = KeyEvent.KEYCODE_UNKNOWN;
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (feedbackToast != null) feedbackToast.cancel();
+        feedbackToast = null;
+        super.onDestroy();
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_UP && event.getKeyCode() == swallowKeyCode) {
             swallowKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+            setServiceCalibration(false);
             return true;
         }
         if (captureAction != null && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
@@ -83,7 +93,7 @@ public final class MainActivity extends Activity {
             swallowKeyCode = event.getKeyCode();
             clearDuplicateBinding(action, event.getKeyCode(), event.getScanCode());
             settings.setBinding(action, event.getKeyCode(), event.getScanCode());
-            status.setText("Bound " + label(action) + " → " + bindingId(settings.getBinding(action)));
+            showBindingToast(action, "Bound");
             refreshBindings();
             notifyService();
             return true;
@@ -102,15 +112,7 @@ public final class MainActivity extends Activity {
         TextView title = text("KeyMouse", 26);
         title.setTypeface(null, 1);
         root.addView(title);
-        root.addView(text("Hold the mouse key to show/hide the cursor. While visible, tap it to switch Normal ↔ Scroll.", 14));
-
-        status = text("Select a cell, then press the physical key.", 13);
-        status.setTextColor(Color.DKGRAY);
-        root.addView(status);
-
-        Button accessibility = button("Open Accessibility settings");
-        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        root.addView(accessibility);
+        root.addView(text("Hold Mouse key to show/hide the cursor. While visible, tap Mouse key to switch Normal / Scroll.", 14));
 
         TextView bindingsHeading = text("Bindings", 19);
         bindingsHeading.setPadding(0, dp(12), 0, dp(4));
@@ -124,50 +126,36 @@ public final class MainActivity extends Activity {
         gridOuter.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(grid, gridOuter);
 
-        addGridButton(grid, MouseAction.MOVE_UP_LEFT, "↖");
-        addGridButton(grid, MouseAction.MOVE_UP, "↑");
-        addGridButton(grid, MouseAction.MOVE_UP_RIGHT, "↗");
-        addGridButton(grid, MouseAction.MOVE_LEFT, "←");
-        addGridButton(grid, MouseAction.LEFT_BUTTON, "●");
-        addGridButton(grid, MouseAction.MOVE_RIGHT, "→");
-        addGridButton(grid, MouseAction.MOVE_DOWN_LEFT, "↙");
-        addGridButton(grid, MouseAction.MOVE_DOWN, "↓");
-        addGridButton(grid, MouseAction.MOVE_DOWN_RIGHT, "↘");
+        addGridButton(grid, MouseAction.MOVE_UP_LEFT, R.drawable.ic_binding_arrow_nw);
+        addGridButton(grid, MouseAction.MOVE_UP, R.drawable.ic_binding_arrow_n);
+        addGridButton(grid, MouseAction.MOVE_UP_RIGHT, R.drawable.ic_binding_arrow_ne);
+        addGridButton(grid, MouseAction.MOVE_LEFT, R.drawable.ic_binding_arrow_w);
+        addGridButton(grid, MouseAction.LEFT_BUTTON, R.drawable.ic_binding_click);
+        addGridButton(grid, MouseAction.MOVE_RIGHT, R.drawable.ic_binding_arrow_e);
+        addGridButton(grid, MouseAction.MOVE_DOWN_LEFT, R.drawable.ic_binding_arrow_sw);
+        addGridButton(grid, MouseAction.MOVE_DOWN, R.drawable.ic_binding_arrow_s);
+        addGridButton(grid, MouseAction.MOVE_DOWN_RIGHT, R.drawable.ic_binding_arrow_se);
+
+        LinearLayout primary = new LinearLayout(this);
+        primary.setOrientation(LinearLayout.HORIZONTAL);
+        primary.setPadding(0, dp(6), 0, 0);
+
+        triggerButton = bindingButton("Bind Mouse key", MouseAction.TRIGGER);
+        primary.addView(triggerButton, weighted());
+
+        cursorSwitchButton = bindingButton("Bind cursor switch", MouseAction.CURSOR_NEXT);
+        primary.addView(cursorSwitchButton, weighted());
+        root.addView(primary);
 
         LinearLayout legend = new LinearLayout(this);
         legend.setOrientation(LinearLayout.HORIZONTAL);
         legend.setGravity(Gravity.CENTER_HORIZONTAL);
-        legend.addView(legendItem("none", COLOR_NONE));
+        legend.addView(legendItem("unbound", COLOR_NONE));
         legend.addView(legendItem("default", COLOR_DEFAULT));
         legend.addView(legendItem("custom", COLOR_CUSTOM));
         root.addView(legend);
 
-        LinearLayout primary = new LinearLayout(this);
-        primary.setOrientation(LinearLayout.HORIZONTAL);
-        triggerButton = button("Bind mouse key");
-        triggerButton.setOnClickListener(v -> startCapture(MouseAction.TRIGGER));
-        triggerButton.setOnLongClickListener(v -> {
-            settings.clearBinding(MouseAction.TRIGGER);
-            status.setText("Mouse key cleared");
-            refreshBindings();
-            notifyService();
-            return true;
-        });
-        attachBindingInspector(triggerButton, MouseAction.TRIGGER);
-        primary.addView(triggerButton, weighted());
-
-        cursorCycleButton = button("");
-        cursorCycleButton.setOnClickListener(v -> {
-            CursorStyle next = settings.cycleCursorStyle();
-            status.setText("Default cursor: " + next.label);
-            refreshCursorRows();
-            refreshCursorButton();
-            notifyService();
-        });
-        primary.addView(cursorCycleButton, weighted());
-        root.addView(primary);
-
-        TextView triggerHint = text("Mouse key: long press = show/hide cursor; short press while visible = Normal/Scroll.", 12);
+        TextView triggerHint = text("Mouse key: hold = show/hide; tap while visible = Normal/Scroll. Cursor switch: cycles enabled cursors while the mouse is visible.", 12);
         triggerHint.setTextColor(Color.DKGRAY);
         root.addView(triggerHint);
 
@@ -184,34 +172,32 @@ public final class MainActivity extends Activity {
         });
         root.addView(speedButton);
 
-        TextView cursorHeading = text("Cursor set", 19);
-        cursorHeading.setPadding(0, dp(12), 0, dp(2));
-        root.addView(cursorHeading);
-        TextView cursorHint = text("Enabled cursors participate in cycling. The selected Default is used when the mouse appears.", 12);
-        cursorHint.setTextColor(Color.DKGRAY);
-        root.addView(cursorHint);
-
-        for (CursorStyle style : CursorStyle.values()) root.addView(cursorRow(style));
-
-        TextView inputHeading = text("Input backend", 19);
-        inputHeading.setPadding(0, dp(12), 0, dp(2));
-        root.addView(inputHeading);
-
-        directInput = new CheckBox(this);
-        directInput.setText("Direct key input (Accessibility)");
-        directInput.setChecked(settings.captureHardwareKeys());
-        directInput.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            settings.setCaptureHardwareKeys(isChecked);
-            notifyService();
-            if (!isChecked) Toast.makeText(this, "KeyMouse will wait for Key Mapper / Intent triggers instead.", Toast.LENGTH_LONG).show();
+        cursorSetToggleButton = button("");
+        cursorSetToggleButton.setOnClickListener(v -> {
+            cursorSetExpanded = !cursorSetExpanded;
+            refreshCursorSetVisibility();
         });
-        root.addView(directInput);
-        TextView directHint = text("On: KeyMouse reads the bound hardware keys itself. Off: another remapper owns the keys and sends broadcasts to KeyMouse.", 12);
-        directHint.setTextColor(Color.DKGRAY);
-        root.addView(directHint);
+        root.addView(cursorSetToggleButton);
 
-        TextView footer = text("Tip: focus or hover a binding to see keyCode and scanCode. Long-press a binding cell to clear it.", 12);
-        footer.setPadding(0, dp(12), 0, dp(12));
+        cursorListContainer = new LinearLayout(this);
+        cursorListContainer.setOrientation(LinearLayout.VERTICAL);
+        TextView cursorHint = text("Enable the cursors that should participate in cycling. The selected row is the current default.", 12);
+        cursorHint.setTextColor(Color.DKGRAY);
+        cursorListContainer.addView(cursorHint);
+        for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
+        root.addView(cursorListContainer);
+
+        TextView inputNote = text("Hardware bindings are observed through Accessibility but never consumed: the same physical key event continues to Android and other apps. Mouse visibility can also be invoked by a system broadcast Intent.", 12);
+        inputNote.setPadding(0, dp(12), 0, dp(6));
+        inputNote.setTextColor(Color.DKGRAY);
+        root.addView(inputNote);
+
+        Button accessibility = button("Open Accessibility settings");
+        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(accessibility);
+
+        TextView footer = text("Long-press a binding control to clear it. Package: ru.vasys.keymouse", 12);
+        footer.setPadding(0, dp(8), 0, dp(12));
         footer.setTextColor(Color.DKGRAY);
         root.addView(footer);
 
@@ -219,14 +205,14 @@ public final class MainActivity extends Activity {
         return scroll;
     }
 
-    private void addGridButton(GridLayout grid, MouseAction action, String symbol) {
-        Button b = new Button(this);
-        b.setText(symbol);
-        b.setTextSize(27);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.CENTER);
-        b.setMinWidth(0);
-        b.setMinHeight(0);
+    private void addGridButton(GridLayout grid, MouseAction action, int iconRes) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(iconRes);
+        b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        b.setPadding(dp(16), dp(16), dp(16), dp(16));
+        b.setContentDescription(label(action));
+        b.setMinimumWidth(0);
+        b.setMinimumHeight(0);
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = dp(72);
         lp.height = dp(64);
@@ -234,7 +220,7 @@ public final class MainActivity extends Activity {
         b.setOnClickListener(v -> startCapture(action));
         b.setOnLongClickListener(v -> {
             settings.clearBinding(action);
-            status.setText("Cleared " + label(action));
+            showBindingToast(action, "Cleared");
             refreshBindings();
             notifyService();
             return true;
@@ -242,6 +228,20 @@ public final class MainActivity extends Activity {
         attachBindingInspector(b, action);
         bindingButtons.put(action, b);
         grid.addView(b);
+    }
+
+    private Button bindingButton(String title, MouseAction action) {
+        Button b = button(title);
+        b.setOnClickListener(v -> startCapture(action));
+        b.setOnLongClickListener(v -> {
+            settings.clearBinding(action);
+            showBindingToast(action, "Cleared");
+            refreshBindings();
+            notifyService();
+            return true;
+        });
+        attachBindingInspector(b, action);
+        return b;
     }
 
     private View cursorRow(CursorStyle style) {
@@ -261,7 +261,6 @@ public final class MainActivity extends Activity {
             if (refreshingCursorRows) return;
             settings.setCursorStyleEnabled(style, isChecked);
             refreshCursorRows();
-            refreshCursorButton();
             notifyService();
         });
         cursorChecks.put(style, enabled);
@@ -273,7 +272,6 @@ public final class MainActivity extends Activity {
             if (refreshingCursorRows || !isChecked) return;
             settings.setCursorStyle(style);
             refreshCursorRows();
-            refreshCursorButton();
             notifyService();
         });
         cursorDefaults.put(style, isDefault);
@@ -283,22 +281,31 @@ public final class MainActivity extends Activity {
 
     private void startCapture(MouseAction action) {
         captureAction = action;
-        status.setText("Press physical key for " + label(action));
+        swallowKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+        setServiceCalibration(true);
+        showToast("Bind " + label(action) + ": press a physical key…");
     }
 
     private void attachBindingInspector(View view, MouseAction action) {
         view.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus && captureAction == null) showBindingInfo(action);
+            if (hasFocus && captureAction == null) showBindingToast(action, null);
         });
         view.setOnHoverListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_HOVER_ENTER && captureAction == null) showBindingInfo(action);
+            if (event.getAction() == MotionEvent.ACTION_HOVER_ENTER && captureAction == null) showBindingToast(action, null);
             return false;
         });
     }
 
-    private void showBindingInfo(MouseAction action) {
+    private void showBindingToast(MouseAction action, String prefix) {
         BindingState state = settings.bindingState(action);
-        status.setText(label(action) + " — " + bindingId(settings.getBinding(action)) + " — " + state.name().toLowerCase());
+        String value = label(action) + " · " + bindingId(settings.getBinding(action)) + " · " + state.name().toLowerCase();
+        showToast(prefix == null ? value : prefix + ": " + value);
+    }
+
+    private void showToast(String message) {
+        if (feedbackToast != null) feedbackToast.cancel();
+        feedbackToast = Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT);
+        feedbackToast.show();
     }
 
     private void clearDuplicateBinding(MouseAction target, int keyCode, int scanCode) {
@@ -314,19 +321,23 @@ public final class MainActivity extends Activity {
     private void refreshAll() {
         refreshBindings();
         refreshCursorRows();
-        refreshCursorButton();
+        refreshCursorSetVisibility();
         refreshSpeedButton();
-        if (directInput != null) directInput.setChecked(settings.captureHardwareKeys());
     }
 
     private void refreshBindings() {
-        for (Map.Entry<MouseAction, Button> entry : bindingButtons.entrySet()) {
-            entry.getValue().setTextColor(bindingColor(settings.bindingState(entry.getKey())));
+        for (Map.Entry<MouseAction, ImageButton> entry : bindingButtons.entrySet()) {
+            entry.getValue().setColorFilter(bindingColor(settings.bindingState(entry.getKey())));
         }
         if (triggerButton != null) {
             BindingState state = settings.bindingState(MouseAction.TRIGGER);
-            triggerButton.setText("Bind mouse key" + (state == BindingState.NONE ? "" : " •"));
+            triggerButton.setText("Bind Mouse key" + (state == BindingState.NONE ? "" : "  •"));
             triggerButton.setTextColor(bindingColor(state));
+        }
+        if (cursorSwitchButton != null) {
+            BindingState state = settings.bindingState(MouseAction.CURSOR_NEXT);
+            cursorSwitchButton.setText("Bind cursor switch" + (state == BindingState.NONE ? "" : "  •"));
+            cursorSwitchButton.setTextColor(bindingColor(state));
         }
     }
 
@@ -345,8 +356,9 @@ public final class MainActivity extends Activity {
         refreshingCursorRows = false;
     }
 
-    private void refreshCursorButton() {
-        if (cursorCycleButton != null) cursorCycleButton.setText("Cursor: " + settings.cursorStyle().label + " ›");
+    private void refreshCursorSetVisibility() {
+        if (cursorSetToggleButton != null) cursorSetToggleButton.setText(cursorSetExpanded ? "Cursor set  ▾" : "Cursor set  ▸");
+        if (cursorListContainer != null) cursorListContainer.setVisibility(cursorSetExpanded ? View.VISIBLE : View.GONE);
     }
 
     private void refreshSpeedButton() {
@@ -358,6 +370,11 @@ public final class MainActivity extends Activity {
         if (service != null) service.reloadSettings();
     }
 
+    private void setServiceCalibration(boolean value) {
+        MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
+        if (service != null) service.setCalibrationMode(value);
+    }
+
     private String bindingId(Binding binding) {
         if (!binding.isBound()) return "unbound";
         String keyName = binding.keyCode >= 0 ? KeyEvent.keyCodeToString(binding.keyCode) : "KEYCODE_UNKNOWN";
@@ -366,16 +383,17 @@ public final class MainActivity extends Activity {
 
     private String label(MouseAction action) {
         switch (action) {
-            case MOVE_UP: return "↑ Up";
-            case MOVE_UP_RIGHT: return "↗ Up-right";
-            case MOVE_RIGHT: return "→ Right";
-            case MOVE_DOWN_RIGHT: return "↘ Down-right";
-            case MOVE_DOWN: return "↓ Down";
-            case MOVE_DOWN_LEFT: return "↙ Down-left";
-            case MOVE_LEFT: return "← Left";
-            case MOVE_UP_LEFT: return "↖ Up-left";
-            case LEFT_BUTTON: return "● Click / hold";
+            case MOVE_UP: return "Up";
+            case MOVE_UP_RIGHT: return "Up-right";
+            case MOVE_RIGHT: return "Right";
+            case MOVE_DOWN_RIGHT: return "Down-right";
+            case MOVE_DOWN: return "Down";
+            case MOVE_DOWN_LEFT: return "Down-left";
+            case MOVE_LEFT: return "Left";
+            case MOVE_UP_LEFT: return "Up-left";
+            case LEFT_BUTTON: return "Click / hold";
             case TRIGGER: return "Mouse key";
+            case CURSOR_NEXT: return "Cursor switch";
             default: return action.name();
         }
     }
@@ -390,7 +408,7 @@ public final class MainActivity extends Activity {
     }
 
     private TextView legendItem(String value, int color) {
-        TextView t = text("● " + value + "   ", 12);
+        TextView t = text(value + "   ", 12);
         t.setTextColor(color);
         return t;
     }

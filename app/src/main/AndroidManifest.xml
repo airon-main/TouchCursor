@@ -33,23 +33,26 @@
             android:name=".input.ExternalTriggerReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="dev.keymouse.input.DOWN" />
-                <action android:name="dev.keymouse.input.UP" />
-                <action android:name="dev.keymouse.input.PULSE" />
-                <action android:name="dev.keymouse.action.TRIGGER_SHORT" />
-                <action android:name="dev.keymouse.action.TRIGGER_LONG" />
-                <action android:name="dev.keymouse.action.TRIGGER_DOWN" />
-                <action android:name="dev.keymouse.action.TRIGGER_UP" />
-                <action android:name="dev.keymouse.action.LEFT_DOWN" />
-                <action android:name="dev.keymouse.action.LEFT_UP" />
-                <action android:name="dev.keymouse.action.MOVE_UP" />
-                <action android:name="dev.keymouse.action.MOVE_UP_RIGHT" />
-                <action android:name="dev.keymouse.action.MOVE_RIGHT" />
-                <action android:name="dev.keymouse.action.MOVE_DOWN_RIGHT" />
-                <action android:name="dev.keymouse.action.MOVE_DOWN" />
-                <action android:name="dev.keymouse.action.MOVE_DOWN_LEFT" />
-                <action android:name="dev.keymouse.action.MOVE_LEFT" />
-                <action android:name="dev.keymouse.action.MOVE_UP_LEFT" />
+                <action android:name="ru.vasys.keymouse.input.DOWN" />
+                <action android:name="ru.vasys.keymouse.input.UP" />
+                <action android:name="ru.vasys.keymouse.input.PULSE" />
+                <action android:name="ru.vasys.keymouse.action.MOUSE_TOGGLE" />
+                <action android:name="ru.vasys.keymouse.action.MODE_TOGGLE" />
+                <action android:name="ru.vasys.keymouse.action.MOUSE_KEY_SHORT" />
+                <action android:name="ru.vasys.keymouse.action.MOUSE_KEY_LONG" />
+                <action android:name="ru.vasys.keymouse.action.MOUSE_KEY_DOWN" />
+                <action android:name="ru.vasys.keymouse.action.MOUSE_KEY_UP" />
+                <action android:name="ru.vasys.keymouse.action.CURSOR_NEXT" />
+                <action android:name="ru.vasys.keymouse.action.LEFT_DOWN" />
+                <action android:name="ru.vasys.keymouse.action.LEFT_UP" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_UP" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_UP_RIGHT" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_RIGHT" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_DOWN_RIGHT" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_DOWN" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_DOWN_LEFT" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_LEFT" />
+                <action android:name="ru.vasys.keymouse.action.MOVE_UP_LEFT" />
             </intent-filter>
         </receiver>
     </application>

@@ -1,8 +1,8 @@
-package dev.keymouse.service;
+package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 
-import dev.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.core.CursorStyle;
 
 public final class PointerController {
     private final CursorOverlay overlay;

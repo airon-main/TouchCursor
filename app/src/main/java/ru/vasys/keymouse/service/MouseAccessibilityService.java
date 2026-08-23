@@ -1,4 +1,4 @@
-package dev.keymouse.service;
+package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -7,14 +7,21 @@ import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
+import android.widget.Toast;
 
 import java.util.EnumSet;
 import java.util.Map;
 
-import dev.keymouse.core.Binding;
-import dev.keymouse.core.MouseAction;
-import dev.keymouse.core.Settings;
+import ru.vasys.keymouse.core.Binding;
+import ru.vasys.keymouse.core.CursorStyle;
+import ru.vasys.keymouse.core.MouseAction;
+import ru.vasys.keymouse.core.Settings;
 
+/**
+ * Accessibility is used as a gesture backend and a non-consuming hardware-key observer.
+ * Bound hardware keys are intentionally returned as false from onKeyEvent(), so Android
+ * and other applications can still receive the same physical key events.
+ */
 public final class MouseAccessibilityService extends AccessibilityService {
     private static volatile MouseAccessibilityService runningInstance;
     private static final long TICK_MS = 16;
@@ -29,6 +36,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean calibrationMode;
     private boolean triggerHeld;
     private boolean triggerLongFired;
+    private Toast feedbackToast;
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
@@ -50,12 +58,12 @@ public final class MouseAccessibilityService extends AccessibilityService {
         settings = new Settings(this);
         bindings = settings.allBindings();
         pointer = new PointerController(this, settings.cursorStyle());
-        applyKeyCaptureFlag();
+        enableKeyObservation();
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // No view-tree scraping: Accessibility is used only for gestures and optional key input.
+        // No view-tree scraping. Accessibility is used only for gestures and key observation.
     }
 
     @Override
@@ -70,22 +78,26 @@ public final class MouseAccessibilityService extends AccessibilityService {
         resetInputState();
         if (pointer != null) pointer.destroy();
         pointer = null;
+        if (feedbackToast != null) feedbackToast.cancel();
+        feedbackToast = null;
         super.onDestroy();
     }
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (settings == null || !settings.captureHardwareKeys()) return false;
+        // During a bind capture MainActivity must see the key without KeyMouse acting on it.
+        if (calibrationMode || settings == null) return false;
+
         MouseAction action = findAction(event);
         if (action == null) return false;
 
         if (action == MouseAction.TRIGGER) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) actionDown(action);
             else if (event.getAction() == KeyEvent.ACTION_UP) actionUp(action);
-            return true;
+            return false;
         }
 
-        // Hidden mouse means the keypad remains a normal Android keypad.
+        // Hidden mouse means the keypad behaves exactly like a normal Android keypad.
         if (pointer == null || !pointer.isVisible()) return false;
 
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -93,7 +105,9 @@ public final class MouseAccessibilityService extends AccessibilityService {
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
             actionUp(action);
         }
-        return true;
+
+        // Never consume/remap the physical event. Other apps may use the same key.
+        return false;
     }
 
     public void externalDown(MouseAction action) {
@@ -108,6 +122,8 @@ public final class MouseAccessibilityService extends AccessibilityService {
         main.post(() -> {
             if (action == MouseAction.TRIGGER) {
                 triggerShort();
+            } else if (action == MouseAction.CURSOR_NEXT) {
+                cycleCursor();
             } else if (action.movement) {
                 if (pointer != null && pointer.isVisible()) {
                     float speed = settings == null ? 10 : settings.speedPxPerTick();
@@ -128,10 +144,22 @@ public final class MouseAccessibilityService extends AccessibilityService {
         main.post(this::toggleMouseVisibility);
     }
 
+    public void externalMouseToggle() {
+        main.post(this::toggleMouseVisibility);
+    }
+
+    public void externalModeToggle() {
+        main.post(this::triggerShort);
+    }
+
+    public void externalCursorNext() {
+        main.post(this::cycleCursor);
+    }
+
     public void setCalibrationMode(boolean enabled) {
         main.post(() -> {
             calibrationMode = enabled;
-            applyKeyCaptureFlag();
+            if (enabled) resetInputState();
         });
     }
 
@@ -140,7 +168,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (settings == null) settings = new Settings(this);
             bindings = settings.allBindings();
             if (pointer != null) pointer.setCursorStyle(settings.cursorStyle());
-            applyKeyCaptureFlag();
+            enableKeyObservation();
         });
     }
 
@@ -166,7 +194,11 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (pressed.add(action)) startTicker();
             return;
         }
-        if (action == MouseAction.LEFT_BUTTON) pointer.leftDown();
+        if (action == MouseAction.LEFT_BUTTON) {
+            pointer.leftDown();
+        } else if (action == MouseAction.CURSOR_NEXT) {
+            cycleCursor();
+        }
     }
 
     private void actionUp(MouseAction action) {
@@ -188,7 +220,9 @@ public final class MouseAccessibilityService extends AccessibilityService {
     }
 
     private void triggerShort() {
-        if (pointer != null && pointer.isVisible()) pointer.toggleScrollMode();
+        if (pointer == null || !pointer.isVisible()) return;
+        pointer.toggleScrollMode();
+        showToast(pointer.isScrollMode() ? "Mouse mode: Scroll" : "Mouse mode: Normal");
     }
 
     private void toggleMouseVisibility() {
@@ -198,6 +232,13 @@ public final class MouseAccessibilityService extends AccessibilityService {
             stopTicker();
         }
         pointer.toggleVisibility();
+        showToast(pointer.isVisible() ? "Mouse: on · Normal" : "Mouse: off");
+    }
+
+    private void cycleCursor() {
+        if (pointer == null || !pointer.isVisible() || settings == null) return;
+        CursorStyle next = settings.cycleCursorStyle();
+        pointer.setCursorStyle(next);
     }
 
     private void startTicker() {
@@ -237,11 +278,17 @@ public final class MouseAccessibilityService extends AccessibilityService {
             vx += action.dx;
             vy += action.dy;
         }
-        if (vx == 0 && vy == 0 || pointer == null) return;
+        if ((vx == 0 && vy == 0) || pointer == null) return;
         vx = Integer.signum(vx);
         vy = Integer.signum(vy);
         float scale = (vx != 0 && vy != 0) ? 0.70710678f : 1f;
         pointer.move(vx * speed * scale, vy * speed * scale);
+    }
+
+    private void showToast(String message) {
+        if (feedbackToast != null) feedbackToast.cancel();
+        feedbackToast = Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT);
+        feedbackToast.show();
     }
 
     private void resetInputState() {
@@ -252,16 +299,10 @@ public final class MouseAccessibilityService extends AccessibilityService {
         main.removeCallbacks(triggerLongPress);
     }
 
-    private void applyKeyCaptureFlag() {
-        if (settings == null) return;
+    private void enableKeyObservation() {
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) return;
-        if (settings.captureHardwareKeys() && !calibrationMode) {
-            info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
-        } else {
-            info.flags &= ~AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
-            resetInputState();
-        }
+        info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
         setServiceInfo(info);
     }
 }

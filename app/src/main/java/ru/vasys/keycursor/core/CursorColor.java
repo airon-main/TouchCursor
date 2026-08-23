@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.core;
+package ru.vasys.keycursor.core;
 
 public enum CursorColor {
     WHITE("WHITE", "White", 0xffffffff),

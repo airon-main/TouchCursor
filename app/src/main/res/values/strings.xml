@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">KeyMouse</string>
-    <string name="service_name">KeyMouse input service</string>
-    <string name="service_description">Keyboard and remote driven mouse/touch layer.</string>
+    <string name="app_name">KeyCursor</string>
+    <string name="service_name">KeyCursor input service</string>
+    <string name="service_description">Hardware-key driven mouse and touch cursor.</string>
 </resources>

@@ -6,4 +6,4 @@
     android:notificationTimeout="0"
     android:canPerformGestures="true"
     android:canRequestFilterKeyEvents="true"
-    android:settingsActivity="ru.vasys.keymouse.ui.MainActivity" />
+    android:settingsActivity="ru.vasys.keycursor.ui.MainActivity" />

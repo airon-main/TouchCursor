@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.service;
+package ru.vasys.keycursor.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.res.Configuration;
@@ -12,13 +12,14 @@ import android.view.accessibility.AccessibilityEvent;
 import android.widget.Toast;
 
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Map;
 
-import ru.vasys.keymouse.core.Binding;
-import ru.vasys.keymouse.core.CursorStyle;
-import ru.vasys.keymouse.core.DpadKeyNormalizer;
-import ru.vasys.keymouse.core.MouseAction;
-import ru.vasys.keymouse.core.Settings;
+import ru.vasys.keycursor.core.Binding;
+import ru.vasys.keycursor.core.CursorStyle;
+import ru.vasys.keycursor.core.DpadKeyNormalizer;
+import ru.vasys.keycursor.core.MouseAction;
+import ru.vasys.keycursor.core.Settings;
 
 /**
  * Accessibility is used as the gesture backend and hardware-key router.
@@ -32,6 +33,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EnumSet<MouseAction> pressed = EnumSet.noneOf(MouseAction.class);
+    private final Map<Long, MouseAction> heldKeyActions = new HashMap<>();
 
     private Settings settings;
     private PointerController pointer;
@@ -76,7 +78,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Intentionally empty. KeyMouse does not inspect UI content or subscribe to
+        // Intentionally empty. KeyCursor does not inspect UI content or subscribe to
         // accessibility events; Accessibility is used only for key filtering and gestures.
     }
 
@@ -106,10 +108,33 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        // During a bind capture MainActivity must see the key without KeyMouse acting on it.
+        // During a bind capture MainActivity must see the key without KeyCursor acting on it.
         if (calibrationMode || settings == null) return false;
 
-        MouseAction action = findAction(event);
+        final long keyToken = keyToken(event);
+        MouseAction action;
+
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            // Android deliberately keeps the key-up keyCode equal to the preceding key-down even
+            // if the display rotated while the key was held. Reuse the action resolved on DOWN so
+            // a 90° <-> 270° flip cannot release a different logical direction.
+            action = heldKeyActions.remove(keyToken);
+            if (action == null) {
+                refreshDisplayRotation();
+                action = findAction(event);
+            }
+        } else {
+            // A landscape-side flip (ROTATION_90 <-> ROTATION_270) can keep Configuration in
+            // LANDSCAPE, so onConfigurationChanged() is not a reliable rotation signal. Reading
+            // rotation per hardware key event is cheap and avoids any polling.
+            refreshDisplayRotation();
+            action = heldKeyActions.get(keyToken);
+            if (action == null) action = findAction(event);
+            if (action != null && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                heldKeyActions.put(keyToken, action);
+            }
+        }
+
         if (action == null) return false;
 
         if (action == MouseAction.TRIGGER) {
@@ -133,6 +158,13 @@ public final class MouseAccessibilityService extends AccessibilityService {
         // A visible mouse is an exclusive interaction mode. Consume movement/click/cursor
         // controls so Android does not move focus or activate a focused view at the same time.
         return true;
+    }
+
+    private long keyToken(KeyEvent event) {
+        long physicalCode = event.getScanCode() > 0
+                ? (0x80000000L | (event.getScanCode() & 0x7fffffffL))
+                : (event.getKeyCode() & 0xffffffffL);
+        return (((long) event.getDeviceId()) << 32) ^ physicalCode;
     }
 
     public void externalDown(MouseAction action) {
@@ -370,6 +402,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     private void resetInputState() {
         pressed.clear();
+        heldKeyActions.clear();
         stopTicker();
         triggerHeld = false;
         triggerLongFired = false;

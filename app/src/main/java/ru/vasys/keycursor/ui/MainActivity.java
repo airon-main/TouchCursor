@@ -1,10 +1,13 @@
-package ru.vasys.keymouse.ui;
+package ru.vasys.keycursor.ui;
 
 import android.app.Activity;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -23,26 +26,27 @@ import android.widget.RadioButton;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.EnumMap;
 import java.util.Map;
 
-import ru.vasys.keymouse.R;
-import ru.vasys.keymouse.core.Binding;
-import ru.vasys.keymouse.core.BindingState;
-import ru.vasys.keymouse.core.CursorColor;
-import ru.vasys.keymouse.core.CursorStyle;
-import ru.vasys.keymouse.core.MouseAction;
-import ru.vasys.keymouse.input.ExternalTriggerReceiver;
-import ru.vasys.keymouse.service.MouseAccessibilityService;
-import ru.vasys.keymouse.view.CursorGlyphView;
+import ru.vasys.keycursor.R;
+import ru.vasys.keycursor.core.Binding;
+import ru.vasys.keycursor.core.BindingState;
+import ru.vasys.keycursor.core.CursorColor;
+import ru.vasys.keycursor.core.CursorStyle;
+import ru.vasys.keycursor.core.MouseAction;
+import ru.vasys.keycursor.input.ExternalTriggerReceiver;
+import ru.vasys.keycursor.service.MouseAccessibilityService;
+import ru.vasys.keycursor.view.CursorGlyphView;
 
 public final class MainActivity extends Activity {
     private static final int[] SPEEDS = {5, 8, 10, 14, 20};
 
-    private ru.vasys.keymouse.core.Settings settings;
+    private ru.vasys.keycursor.core.Settings settings;
     private MouseAction captureAction;
     private int swallowKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     private Toast feedbackToast;
@@ -50,13 +54,13 @@ public final class MainActivity extends Activity {
     private Button cursorSwitchButton;
     private Button speedButton;
     private CursorGlyphView cursorAppearancePreview;
-    private CheckBox externalControlCheck;
-    private CheckBox wrapEdgesCheck;
-    private CheckBox rotateLandscapeCheck;
-    private CheckBox invertHorizontalPortraitCheck;
-    private CheckBox invertVerticalPortraitCheck;
-    private CheckBox invertHorizontalLandscapeCheck;
-    private CheckBox invertVerticalLandscapeCheck;
+    private Switch externalControlCheck;
+    private Switch wrapEdgesCheck;
+    private Switch rotateLandscapeCheck;
+    private Switch invertHorizontalPortraitCheck;
+    private Switch invertVerticalPortraitCheck;
+    private Switch invertHorizontalLandscapeCheck;
+    private Switch invertVerticalLandscapeCheck;
     private Spinner cursorColorSpinner;
     private TextView cursorSizeLabel;
     private SeekBar cursorSizeSeek;
@@ -76,7 +80,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        settings = new ru.vasys.keymouse.core.Settings(this);
+        settings = new ru.vasys.keycursor.core.Settings(this);
         setContentView(buildUi());
     }
 
@@ -124,41 +128,54 @@ public final class MainActivity extends Activity {
 
     private View buildUi() {
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(pageBackgroundColor());
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int p = dp(14);
-        root.setPadding(p, p, p, p);
-        scroll.addView(root);
+        root.setPadding(dp(14), dp(18), dp(14), dp(28));
+        scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
-        TextView title = text("KeyMouse", 26);
+        TextView title = text("KeyCursor", 28);
         title.setTypeface(null, 1);
+        title.setPadding(dp(2), 0, 0, 0);
         root.addView(title);
 
-        root.addView(sectionHeading("Accessibility"));
-        root.addView(sectionDescription("Required to read hardware keys, draw the cursor overlay and inject touch gestures."));
+        TextView subtitle = sectionDescription("Keyboard controls, real touch gestures.");
+        subtitle.setTextSize(13);
+        subtitle.setPadding(dp(2), 0, 0, dp(8));
+        root.addView(subtitle);
 
+        root.addView(buildAccessibilityCard());
+        root.addView(buildPointerCard());
+        root.addView(buildDirectionCard());
+        root.addView(buildBindingsCard());
+        root.addView(buildExternalControlCard());
+
+        refreshAll();
+        return scroll;
+    }
+
+    private View buildAccessibilityCard() {
+        LinearLayout card = card(
+                "Accessibility",
+                "Required for hardware keys, the cursor overlay and touch injection.");
         Button accessibility = button("Open Accessibility settings");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        root.addView(accessibility);
+        card.addView(accessibility);
+        return card;
+    }
 
-        externalControlCheck = new CheckBox(this);
-        externalControlCheck.setText("Allow external control (Key Mapper / Tasker)");
-        externalControlCheck.setPadding(0, dp(4), 0, dp(4));
-        externalControlCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (settings.externalControlEnabled() == isChecked) return;
-            settings.setExternalControlEnabled(isChecked);
-            ExternalTriggerReceiver.setComponentEnabled(this, isChecked);
-        });
-        root.addView(externalControlCheck);
-        root.addView(sectionDescription("Off by default. Enable only if another app should control KeyMouse through broadcast Intents."));
-
-        root.addView(sectionHeading("Pointer"));
-        root.addView(sectionDescription("Tune cursor movement and appearance. Preview updates immediately."));
+    private View buildPointerCard() {
+        LinearLayout card = card(
+                "Pointer",
+                "Movement, appearance and edge behavior. Changes are previewed immediately.");
 
         cursorAppearancePreview = new CursorGlyphView(this);
-        LinearLayout.LayoutParams appearancePreviewParams = new LinearLayout.LayoutParams(dp(42), dp(42));
-        appearancePreviewParams.gravity = Gravity.CENTER_HORIZONTAL;
-        root.addView(cursorAppearancePreview, appearancePreviewParams);
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(dp(52), dp(52));
+        previewParams.gravity = Gravity.CENTER_HORIZONTAL;
+        previewParams.bottomMargin = dp(8);
+        card.addView(cursorAppearancePreview, previewParams);
 
         speedButton = button("");
         speedButton.setOnClickListener(v -> {
@@ -171,70 +188,58 @@ public final class MainActivity extends Activity {
             refreshSpeedButton();
             notifyService();
         });
-        speedButton.setPadding(0, dp(6), 0, 0);
-        root.addView(speedButton);
+        card.addView(settingRow("Movement speed", speedButton));
 
-        wrapEdgesCheck = new CheckBox(this);
-        wrapEdgesCheck.setText("Wrap cursor at screen edges");
-        wrapEdgesCheck.setPadding(0, dp(4), 0, dp(4));
+        cursorSizeLabel = settingLabel("");
+        card.addView(cursorSizeLabel);
+        cursorSizeSeek = buildCursorSizeSeek();
+        card.addView(cursorSizeSeek);
+
+        card.addView(settingLabel("Cursor color"));
+        cursorColorSpinner = buildCursorColorSpinner();
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(-1, -2);
+        spinnerParams.bottomMargin = dp(4);
+        card.addView(cursorColorSpinner, spinnerParams);
+
+        wrapEdgesCheck = optionSwitch("Wrap at screen edges");
         wrapEdgesCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.wrapEdges() == isChecked) return;
             settings.setWrapEdges(isChecked);
             notifyService();
         });
-        root.addView(wrapEdgesCheck);
+        card.addView(wrapEdgesCheck);
 
-        TextView colorLabel = text("Cursor color", 14);
-        colorLabel.setTypeface(null, 1);
-        colorLabel.setPadding(0, dp(8), 0, dp(2));
-        root.addView(colorLabel);
-
-        cursorColorSpinner = new Spinner(this);
-        String[] colorLabels = new String[CursorColor.values().length];
-        for (int i = 0; i < CursorColor.values().length; i++) colorLabels[i] = CursorColor.values()[i].label;
-        ArrayAdapter<String> colorAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, colorLabels);
-        colorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        cursorColorSpinner.setAdapter(colorAdapter);
-        CursorColor initialColor = settings.cursorColor();
-        int initialColorPosition = 0;
-        for (int i = 0; i < CursorColor.values().length; i++) {
-            if (CursorColor.values()[i] == initialColor) initialColorPosition = i;
-        }
-        cursorColorSpinner.setSelection(initialColorPosition, false);
-        cursorColorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (refreshingCursorColor) return;
-                CursorColor selected = CursorColor.values()[position];
-                if (selected == settings.cursorColor()) return;
-                settings.setCursorColor(selected);
-                refreshCursorPreviews();
-                notifyService();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
+        cursorSetToggleButton = button("");
+        LinearLayout.LayoutParams cursorSetButtonParams = new LinearLayout.LayoutParams(-1, -2);
+        cursorSetButtonParams.topMargin = dp(8);
+        cursorSetToggleButton.setLayoutParams(cursorSetButtonParams);
+        cursorSetToggleButton.setOnClickListener(v -> {
+            cursorSetExpanded = !cursorSetExpanded;
+            refreshCursorSetVisibility();
         });
-        root.addView(cursorColorSpinner);
+        card.addView(cursorSetToggleButton);
 
-        cursorSizeLabel = text("", 14);
-        cursorSizeLabel.setTypeface(null, 1);
-        cursorSizeLabel.setPadding(0, dp(10), 0, 0);
-        root.addView(cursorSizeLabel);
+        cursorListContainer = new LinearLayout(this);
+        cursorListContainer.setOrientation(LinearLayout.VERTICAL);
+        cursorListContainer.setPadding(0, dp(4), 0, 0);
+        cursorListContainer.addView(sectionDescription("Enable styles for cycling and choose the default cursor."));
+        for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
+        card.addView(cursorListContainer);
+        return card;
+    }
 
-        cursorSizeSeek = new SeekBar(this);
-        cursorSizeSeek.setMax(ru.vasys.keymouse.core.Settings.MAX_CURSOR_SIZE_DP - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP);
-        cursorSizeSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+    private SeekBar buildCursorSizeSeek() {
+        SeekBar seek = new SeekBar(this);
+        seek.setMax(ru.vasys.keycursor.core.Settings.MAX_CURSOR_SIZE_DP - ru.vasys.keycursor.core.Settings.MIN_CURSOR_SIZE_DP);
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (!fromUser) return;
-                int value = ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP + progress;
+                int value = ru.vasys.keycursor.core.Settings.MIN_CURSOR_SIZE_DP + progress;
                 pendingCursorSizeDp = value;
                 refreshCursorSizeLabel(value);
                 refreshCursorPreviews(value);
                 previewCursorSize(value);
-                // Keyboard/D-pad SeekBar changes do not have a touch tracking lifecycle.
                 if (!cursorSizeTracking) {
                     settings.setCursorSizeDp(value);
                     notifyService();
@@ -253,88 +258,103 @@ public final class MainActivity extends Activity {
                 notifyService();
             }
         });
-        root.addView(cursorSizeSeek);
+        return seek;
+    }
 
-        cursorSetToggleButton = button("");
-        cursorSetToggleButton.setPadding(0, dp(8), 0, 0);
-        cursorSetToggleButton.setOnClickListener(v -> {
-            cursorSetExpanded = !cursorSetExpanded;
-            refreshCursorSetVisibility();
+    private Spinner buildCursorColorSpinner() {
+        Spinner spinner = new Spinner(this);
+        String[] labels = new String[CursorColor.values().length];
+        for (int i = 0; i < CursorColor.values().length; i++) labels[i] = CursorColor.values()[i].label;
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+
+        CursorColor initialColor = settings.cursorColor();
+        int initialPosition = 0;
+        for (int i = 0; i < CursorColor.values().length; i++) {
+            if (CursorColor.values()[i] == initialColor) initialPosition = i;
+        }
+        spinner.setSelection(initialPosition, false);
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (refreshingCursorColor) return;
+                CursorColor selected = CursorColor.values()[position];
+                if (selected == settings.cursorColor()) return;
+                settings.setCursorColor(selected);
+                refreshCursorPreviews();
+                notifyService();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
-        root.addView(cursorSetToggleButton);
+        return spinner;
+    }
 
-        cursorListContainer = new LinearLayout(this);
-        cursorListContainer.setOrientation(LinearLayout.VERTICAL);
-        TextView cursorHint = sectionDescription("Enable cursor styles for cycling and choose the one used by default.");
-        cursorListContainer.addView(cursorHint);
-        for (CursorStyle style : CursorStyle.values()) cursorListContainer.addView(cursorRow(style));
-        root.addView(cursorListContainer);
+    private View buildDirectionCard() {
+        LinearLayout card = card(
+                "Direction",
+                "Rotate physical controls with the device, then optionally invert each axis.");
 
-        root.addView(sectionHeading("Direction behavior"));
-        root.addView(sectionDescription("Choose how physical directions map to cursor movement. Landscape rotation is optional; inversion is applied after rotation."));
-
-        rotateLandscapeCheck = optionCheckBox("Rotate controls with screen in landscape");
+        rotateLandscapeCheck = optionSwitch("Rotate controls in landscape");
         rotateLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.rotateLandscapeControls() == isChecked) return;
             settings.setRotateLandscapeControls(isChecked);
             notifyService();
         });
-        root.addView(rotateLandscapeCheck);
+        card.addView(rotateLandscapeCheck);
 
-        TextView portraitLabel = text("Portrait", 14);
-        portraitLabel.setTypeface(null, 1);
-        portraitLabel.setPadding(0, dp(8), 0, 0);
-        root.addView(portraitLabel);
-
-        invertHorizontalPortraitCheck = optionCheckBox("Invert left / right");
+        card.addView(subheading("Portrait"));
+        invertHorizontalPortraitCheck = optionSwitch("Invert left / right");
         invertHorizontalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertHorizontalPortrait() == isChecked) return;
             settings.setInvertHorizontalPortrait(isChecked);
             notifyService();
         });
-        root.addView(invertHorizontalPortraitCheck);
+        card.addView(invertHorizontalPortraitCheck);
 
-        invertVerticalPortraitCheck = optionCheckBox("Invert up / down");
+        invertVerticalPortraitCheck = optionSwitch("Invert up / down");
         invertVerticalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertVerticalPortrait() == isChecked) return;
             settings.setInvertVerticalPortrait(isChecked);
             notifyService();
         });
-        root.addView(invertVerticalPortraitCheck);
+        card.addView(invertVerticalPortraitCheck);
 
-        TextView landscapeLabel = text("Landscape", 14);
-        landscapeLabel.setTypeface(null, 1);
-        landscapeLabel.setPadding(0, dp(8), 0, 0);
-        root.addView(landscapeLabel);
-
-        invertHorizontalLandscapeCheck = optionCheckBox("Invert left / right");
+        card.addView(subheading("Landscape"));
+        invertHorizontalLandscapeCheck = optionSwitch("Invert left / right");
         invertHorizontalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertHorizontalLandscape() == isChecked) return;
             settings.setInvertHorizontalLandscape(isChecked);
             notifyService();
         });
-        root.addView(invertHorizontalLandscapeCheck);
+        card.addView(invertHorizontalLandscapeCheck);
 
-        invertVerticalLandscapeCheck = optionCheckBox("Invert up / down");
+        invertVerticalLandscapeCheck = optionSwitch("Invert up / down");
         invertVerticalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertVerticalLandscape() == isChecked) return;
             settings.setInvertVerticalLandscape(isChecked);
             notifyService();
         });
-        root.addView(invertVerticalLandscapeCheck);
+        card.addView(invertVerticalLandscapeCheck);
+        return card;
+    }
 
-        root.addView(sectionHeading("Bindings"));
-        TextView triggerHint = sectionDescription("Hold Mouse key: show/hide. Tap it while visible: Normal/Scroll. Cursor switch: next enabled cursor.");
-        triggerHint.setPadding(0, 0, 0, dp(8));
-        root.addView(triggerHint);
+    private View buildBindingsCard() {
+        LinearLayout card = card(
+                "Bindings",
+                "Hold Mouse key to show or hide the cursor. Tap it while visible to switch Normal / Scroll.");
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
         grid.setRowCount(3);
         grid.setUseDefaultMargins(true);
-        LinearLayout.LayoutParams gridOuter = new LinearLayout.LayoutParams(-2, -2);
-        gridOuter.gravity = Gravity.CENTER_HORIZONTAL;
-        root.addView(grid, gridOuter);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(-2, -2);
+        gridParams.gravity = Gravity.CENTER_HORIZONTAL;
+        gridParams.bottomMargin = dp(6);
+        card.addView(grid, gridParams);
 
         addGridButton(grid, MouseAction.MOVE_UP_LEFT, R.drawable.ic_binding_arrow_nw);
         addGridButton(grid, MouseAction.MOVE_UP, R.drawable.ic_binding_arrow_n);
@@ -348,33 +368,47 @@ public final class MainActivity extends Activity {
 
         LinearLayout primary = new LinearLayout(this);
         primary.setOrientation(LinearLayout.HORIZONTAL);
-        primary.setPadding(0, dp(6), 0, 0);
+        primary.setGravity(Gravity.CENTER_VERTICAL);
 
-        triggerButton = bindingButton("Bind Mouse key", MouseAction.TRIGGER);
-        primary.addView(triggerButton, weighted());
+        triggerButton = bindingButton("Mouse key", MouseAction.TRIGGER);
+        LinearLayout.LayoutParams triggerParams = weighted();
+        triggerParams.rightMargin = dp(4);
+        primary.addView(triggerButton, triggerParams);
 
-        cursorSwitchButton = bindingButton("Bind cursor switch", MouseAction.CURSOR_NEXT);
-        primary.addView(cursorSwitchButton, weighted());
-        root.addView(primary);
+        cursorSwitchButton = bindingButton("Cursor switch", MouseAction.CURSOR_NEXT);
+        LinearLayout.LayoutParams cursorSwitchParams = weighted();
+        cursorSwitchParams.leftMargin = dp(4);
+        primary.addView(cursorSwitchButton, cursorSwitchParams);
+        card.addView(primary);
 
         LinearLayout legend = new LinearLayout(this);
         legend.setOrientation(LinearLayout.HORIZONTAL);
         legend.setGravity(Gravity.CENTER_HORIZONTAL);
+        legend.setPadding(0, dp(8), 0, 0);
         legend.addView(legendItem("unbound", bindingColor(BindingState.NONE)));
         legend.addView(legendItem("default", bindingColor(BindingState.DEFAULT)));
         legend.addView(legendItem("custom", bindingColor(BindingState.CUSTOM)));
-        root.addView(legend);
+        card.addView(legend);
 
-        TextView inputNote = sectionDescription("When the mouse is hidden, bound keys pass through normally. While visible, movement, click and cursor-switch are captured so Android focus stays still. Mouse key remains pass-through.");
-        inputNote.setPadding(0, dp(10), 0, dp(4));
-        root.addView(inputNote);
+        TextView footer = sectionDescription(
+                "Hidden: keys pass through. Visible: movement and click are captured. Tap to bind · hold to clear · focus to show key ID.");
+        footer.setPadding(0, dp(8), 0, 0);
+        card.addView(footer);
+        return card;
+    }
 
-        TextView footer = sectionDescription("Tap to bind. Long-press to clear. Focus or hover a binding to show its key ID in a system Toast.");
-        footer.setPadding(0, dp(2), 0, dp(12));
-        root.addView(footer);
-
-        refreshAll();
-        return scroll;
+    private View buildExternalControlCard() {
+        LinearLayout card = card(
+                "External control",
+                "Optional broadcast control for Key Mapper, Tasker or automation tools.");
+        externalControlCheck = optionSwitch("Allow external control");
+        externalControlCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.externalControlEnabled() == isChecked) return;
+            settings.setExternalControlEnabled(isChecked);
+            ExternalTriggerReceiver.setComponentEnabled(this, isChecked);
+        });
+        card.addView(externalControlCheck);
+        return card;
     }
 
     private void addGridButton(GridLayout grid, MouseAction action, int iconRes) {
@@ -385,6 +419,7 @@ public final class MainActivity extends Activity {
         b.setContentDescription(label(action));
         b.setMinimumWidth(0);
         b.setMinimumHeight(0);
+        b.setBackground(controlBackground());
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = dp(72);
         lp.height = dp(64);
@@ -519,12 +554,12 @@ public final class MainActivity extends Activity {
         }
         if (triggerButton != null) {
             BindingState state = settings.bindingState(MouseAction.TRIGGER);
-            triggerButton.setText("Bind Mouse key" + (state == BindingState.NONE ? "" : "  •"));
+            triggerButton.setText("Mouse key" + (state == BindingState.NONE ? "" : "  •"));
             triggerButton.setTextColor(bindingColor(state));
         }
         if (cursorSwitchButton != null) {
             BindingState state = settings.bindingState(MouseAction.CURSOR_NEXT);
-            cursorSwitchButton.setText("Bind cursor switch" + (state == BindingState.NONE ? "" : "  •"));
+            cursorSwitchButton.setText("Cursor switch" + (state == BindingState.NONE ? "" : "  •"));
             cursorSwitchButton.setTextColor(bindingColor(state));
         }
     }
@@ -550,7 +585,7 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshSpeedButton() {
-        if (speedButton != null) speedButton.setText("Cursor speed: " + settings.speedPxPerTick());
+        if (speedButton != null) speedButton.setText(String.valueOf(settings.speedPxPerTick()));
     }
 
     private void refreshExternalControl() {
@@ -579,13 +614,13 @@ public final class MainActivity extends Activity {
         pendingCursorSizeDp = value;
         refreshCursorSizeLabel(value);
         if (cursorSizeSeek != null) {
-            int progress = value - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP;
+            int progress = value - ru.vasys.keycursor.core.Settings.MIN_CURSOR_SIZE_DP;
             cursorSizeSeek.setProgress(progress);
         }
     }
 
     private void refreshCursorSizeLabel(int value) {
-        if (cursorSizeLabel != null) cursorSizeLabel.setText("Cursor size: " + value + " dp");
+        if (cursorSizeLabel != null) cursorSizeLabel.setText("Cursor size · " + value + " dp");
     }
 
     private void refreshCursorPreviews() {
@@ -668,16 +703,64 @@ public final class MainActivity extends Activity {
         return t;
     }
 
-    private TextView sectionHeading(String value) {
-        TextView t = text(value, 19);
+    private LinearLayout card(String title, String description) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(16), dp(14));
+        card.setBackground(roundedBackground(surfaceColor(), 18));
+        card.setElevation(dp(1));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(10);
+        card.setLayoutParams(lp);
+
+        TextView heading = text(title, 18);
+        heading.setTypeface(null, 1);
+        heading.setPadding(0, 0, 0, dp(2));
+        card.addView(heading);
+
+        if (description != null && !description.isEmpty()) {
+            TextView body = sectionDescription(description);
+            body.setPadding(0, 0, 0, dp(10));
+            card.addView(body);
+        }
+        return card;
+    }
+
+    private TextView subheading(String value) {
+        TextView t = text(value, 13);
         t.setTypeface(null, 1);
-        t.setPadding(0, dp(14), 0, dp(2));
+        t.setTextColor(themeColor(android.R.attr.textColorSecondary, Color.DKGRAY));
+        t.setPadding(0, dp(10), 0, dp(2));
         return t;
+    }
+
+    private TextView settingLabel(String value) {
+        TextView t = text(value, 14);
+        t.setTypeface(null, 1);
+        t.setPadding(0, dp(8), 0, dp(2));
+        return t;
+    }
+
+    private View settingRow(String label, View control) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+
+        TextView name = text(label, 14);
+        name.setTypeface(null, 1);
+        row.addView(name, weighted());
+
+        LinearLayout.LayoutParams controlParams = new LinearLayout.LayoutParams(dp(88), -2);
+        row.addView(control, controlParams);
+        return row;
     }
 
     private TextView sectionDescription(String value) {
         TextView t = text(value, 12);
         t.setTextColor(themeColor(android.R.attr.textColorSecondary, Color.DKGRAY));
+        t.setLineSpacing(0f, 1.08f);
         t.setPadding(0, 0, 0, dp(6));
         return t;
     }
@@ -686,11 +769,13 @@ public final class MainActivity extends Activity {
         return new LinearLayout.LayoutParams(0, -2, 1f);
     }
 
-    private CheckBox optionCheckBox(String label) {
-        CheckBox check = new CheckBox(this);
-        check.setText(label);
-        check.setPadding(0, dp(2), 0, dp(2));
-        return check;
+    private Switch optionSwitch(String label) {
+        Switch option = new Switch(this);
+        option.setText(label);
+        option.setGravity(Gravity.CENTER_VERTICAL);
+        option.setMinHeight(dp(44));
+        option.setPadding(0, dp(1), 0, dp(1));
+        return option;
     }
 
     private Button button(String label) {
@@ -698,8 +783,45 @@ public final class MainActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setGravity(Gravity.CENTER);
-        b.setMinHeight(dp(48));
+        b.setMinHeight(dp(44));
+        b.setBackground(controlBackground());
         return b;
+    }
+
+    private Drawable controlBackground() {
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, roundedBackground(controlActiveColor(), 12));
+        states.addState(new int[]{android.R.attr.state_focused}, roundedBackground(controlActiveColor(), 12));
+        states.addState(new int[]{}, roundedBackground(controlColor(), 12));
+        return states;
+    }
+
+    private Drawable roundedBackground(int color, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private int pageBackgroundColor() {
+        return isNightMode() ? 0xff101114 : 0xfff2f3f5;
+    }
+
+    private int surfaceColor() {
+        return isNightMode() ? 0xff1b1d21 : 0xffffffff;
+    }
+
+    private int controlColor() {
+        return isNightMode() ? 0xff292c31 : 0xffeceef1;
+    }
+
+    private int controlActiveColor() {
+        return isNightMode() ? 0xff374151 : 0xffdbeafe;
+    }
+
+    private boolean isNightMode() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
     }
 
     private TextView text(String value, int sp) {

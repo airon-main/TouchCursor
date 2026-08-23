@@ -1,8 +1,8 @@
-# KeyMouse
+# KeyCursor
 
-Keyboard / D-pad mouse for Android 8+.
+Hardware-key mouse and touch cursor for Android 8+.
 
-KeyMouse turns hardware keys into a real touch cursor: movement, click-and-hold, drag and continuous scrolling. The cursor is hidden until you hold the configured **Mouse key**.
+KeyCursor turns hardware keys into a real touch cursor: movement, click-and-hold, drag and continuous scrolling. The cursor is hidden until you hold the configured **Mouse key**.
 
 ## Features
 
@@ -18,14 +18,16 @@ KeyMouse turns hardware keys into a real touch cursor: movement, click-and-hold,
 - optional broadcast control for Key Mapper, Tasker, Automate or ADB
 - no network permission, analytics or ads
 
-Package: `ru.vasys.keymouse`
+Package: `ru.vasys.keycursor`
 
 Minimum Android: 8.0 / API 26
 
+Tested on **Fujitsu F-03L** (Android 8.1).
+
 ## Setup
 
-1. Install KeyMouse.
-2. Open **Accessibility settings** from the app and enable **KeyMouse input service**.
+1. Install KeyCursor.
+2. Open **Accessibility settings** from the app and enable **KeyCursor input service**.
 3. Bind **Mouse key** and any directions your device does not report as the standard D-pad.
 4. Hold Mouse key to show or hide the cursor.
 
@@ -45,21 +47,21 @@ Inversion is applied after landscape rotation.
 
 ## External control
 
-External broadcasts are disabled until **Allow external control** is enabled in KeyMouse.
+External broadcasts are disabled until **Allow external control** is enabled in KeyCursor.
 
 Show / hide:
 
 ```sh
 adb shell am broadcast \
-  -a ru.vasys.keymouse.action.MOUSE_TOGGLE \
-  -n ru.vasys.keymouse/.input.ExternalTriggerReceiver
+  -a ru.vasys.keycursor.action.MOUSE_TOGGLE \
+  -n ru.vasys.keycursor/.input.ExternalTriggerReceiver
 ```
 
 Other actions include `MODE_TOGGLE`, `CURSOR_NEXT`, `LEFT_DOWN`, `LEFT_UP` and `MOVE_*`.
 
 ## Build
 
-Requires JDK 17 and Android SDK 36.
+Requires JDK 17 and Android SDK 35.
 
 ```sh
 ./gradlew :app:assembleDebug
@@ -71,17 +73,17 @@ Create the signing key once and keep it safe. The same key is required for futur
 
 ```sh
 keytool -genkeypair -v \
-  -keystore keymouse-release.jks \
-  -alias keymouse \
+  -keystore keycursor-release.jks \
+  -alias keycursor \
   -keyalg RSA -keysize 4096 -validity 10000
 ```
 
 Copy `keystore.properties.example` to `keystore.properties` and fill in the real path/passwords:
 
 ```properties
-storeFile=/absolute/path/to/keymouse-release.jks
+storeFile=/absolute/path/to/keycursor-release.jks
 storePassword=...
-keyAlias=keymouse
+keyAlias=keycursor
 keyPassword=...
 ```
 
@@ -101,8 +103,8 @@ app/build/outputs/apk/release/app-release.apk
 
 ## Notes
 
-Android allows only one enabled Accessibility service to own hardware key filtering at a time. If another accessibility remapper owns that stream, use KeyMouse's external broadcast backend instead.
+Android allows only one enabled Accessibility service to own hardware key filtering at a time. If another accessibility remapper owns that stream, use KeyCursor's external broadcast backend instead.
 
 Cursor artwork derived from Pictogrammers Material Design Icons is listed in `THIRD_PARTY_NOTICES.md`.
 
-KeyMouse itself is MIT licensed. See `PRIVACY.md` for data handling.
+KeyCursor itself is MIT licensed. See `PRIVACY.md` for data handling.

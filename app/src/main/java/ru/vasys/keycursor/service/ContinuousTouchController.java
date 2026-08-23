@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.service;
+package ru.vasys.keycursor.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;

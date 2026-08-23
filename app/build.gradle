@@ -10,15 +10,15 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace 'ru.vasys.keymouse'
-    compileSdk 36
+    namespace 'ru.vasys.keycursor'
+    compileSdk 35
 
     defaultConfig {
-        applicationId 'ru.vasys.keymouse'
+        applicationId 'ru.vasys.keycursor'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '0.4.2'
+        versionCode 14
+        versionName '0.5.0'
     }
 
     signingConfigs {

@@ -1,6 +1,6 @@
-package ru.vasys.keymouse.core;
+package ru.vasys.keycursor.core;
 
-import ru.vasys.keymouse.R;
+import ru.vasys.keycursor.R;
 
 public enum CursorStyle {
     ARROW("ARROW", "Arrow", R.drawable.cursor_arrow, 0.25f, 0.125f),

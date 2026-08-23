@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.input;
+package ru.vasys.keycursor.input;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -6,13 +6,13 @@ import android.content.Intent;
 import android.content.ComponentName;
 import android.content.pm.PackageManager;
 
-import ru.vasys.keymouse.core.MouseAction;
-import ru.vasys.keymouse.core.Settings;
-import ru.vasys.keymouse.service.MouseAccessibilityService;
+import ru.vasys.keycursor.core.MouseAction;
+import ru.vasys.keycursor.core.Settings;
+import ru.vasys.keycursor.service.MouseAccessibilityService;
 
 /** Public Intent surface for Key Mapper / Tasker / Automate / ADB. */
 public final class ExternalTriggerReceiver extends BroadcastReceiver {
-    public static final String PREFIX = "ru.vasys.keymouse.";
+    public static final String PREFIX = "ru.vasys.keycursor.";
     public static final String EXTRA_KEY = "key";
 
     public static void setComponentEnabled(Context context, boolean enabled) {

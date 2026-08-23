@@ -1,6 +1,6 @@
 # Privacy
 
-KeyMouse does not collect, transmit or sell user data.
+KeyCursor does not collect, transmit or sell user data.
 
 - The app requests no Internet permission and contains no analytics or advertising SDKs.
 - Bindings, cursor preferences and the external-control opt-in are stored locally in Android `SharedPreferences`.

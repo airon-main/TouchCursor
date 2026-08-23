@@ -1,12 +1,12 @@
-package ru.vasys.keymouse.view;
+package ru.vasys.keycursor.view;
 
 import android.content.Context;
 import android.graphics.Color;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
-import ru.vasys.keymouse.core.CursorColor;
-import ru.vasys.keymouse.core.CursorStyle;
+import ru.vasys.keycursor.core.CursorColor;
+import ru.vasys.keycursor.core.CursorStyle;
 
 /**
  * Shared vector cursor renderer used by both the accessibility overlay and UI previews.
@@ -14,7 +14,7 @@ import ru.vasys.keymouse.core.CursorStyle;
  * thin inverse-color outline without maintaining separate stroked assets.
  */
 public final class CursorGlyphView extends FrameLayout {
-    private static final float OUTLINE_DP = 0.75f;
+    private static final float OUTLINE_DP = 0.90f;
     private final ImageView outline;
     private final ImageView foreground;
     private CursorStyle style = CursorStyle.ARROW;

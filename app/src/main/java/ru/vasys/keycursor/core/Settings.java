@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.core;
+package ru.vasys.keycursor.core;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class Settings {
-    private static final String PREFS = "keymouse";
+    private static final String PREFS = "keycursor";
     private static final String PREFIX_KEY = "binding.key.";
     private static final String PREFIX_SCAN = "binding.scan.";
     private static final String CURSOR_STYLE = "cursor_style";

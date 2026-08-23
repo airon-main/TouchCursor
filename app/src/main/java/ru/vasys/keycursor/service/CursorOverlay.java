@@ -1,4 +1,4 @@
-package ru.vasys.keymouse.service;
+package ru.vasys.keycursor.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
@@ -8,9 +8,9 @@ import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
-import ru.vasys.keymouse.core.CursorColor;
-import ru.vasys.keymouse.core.CursorStyle;
-import ru.vasys.keymouse.view.CursorGlyphView;
+import ru.vasys.keycursor.core.CursorColor;
+import ru.vasys.keycursor.core.CursorStyle;
+import ru.vasys.keycursor.view.CursorGlyphView;
 
 /**
  * Draws the cursor in one fixed accessibility overlay.

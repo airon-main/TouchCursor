@@ -20,6 +20,7 @@ public final class Settings {
     private static final String CURSOR_COLOR = "cursor_color";
     private static final String CURSOR_SET_VERSION = "cursor_set_version";
     private static final String CURSOR_SIZE = "cursor_size_dp";
+    private static final String EXTERNAL_CONTROL = "external_control";
     private static final int CURRENT_CURSOR_SET_VERSION = 3;
     public static final int DEFAULT_CURSOR_SIZE_DP = 42;
     public static final int MIN_CURSOR_SIZE_DP = 24;
@@ -220,6 +221,19 @@ public final class Settings {
     public void setCursorSizeDp(int value) {
         int safe = Math.max(MIN_CURSOR_SIZE_DP, Math.min(MAX_CURSOR_SIZE_DP, value));
         prefs.edit().putInt(CURSOR_SIZE, safe).apply();
+    }
+
+    public static boolean isExternalControlEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(EXTERNAL_CONTROL, false);
+    }
+
+    public boolean externalControlEnabled() {
+        return prefs.getBoolean(EXTERNAL_CONTROL, false);
+    }
+
+    public void setExternalControlEnabled(boolean enabled) {
+        prefs.edit().putBoolean(EXTERNAL_CONTROL, enabled).apply();
     }
 
     public boolean wrapEdges() {

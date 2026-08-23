@@ -90,8 +90,8 @@ public final class PointerController {
         overlay.setCursorSizeDp(sizeDp);
     }
 
-    public void setForegroundPackage(String packageName) {
-        overlay.setForegroundPackage(packageName);
+    public void refreshDisplayBounds() {
+        overlay.refreshDisplayBounds();
     }
 
     public boolean isScrollMode() {

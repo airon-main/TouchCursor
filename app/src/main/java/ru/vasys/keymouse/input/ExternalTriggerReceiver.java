@@ -3,8 +3,11 @@ package ru.vasys.keymouse.input;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ComponentName;
+import android.content.pm.PackageManager;
 
 import ru.vasys.keymouse.core.MouseAction;
+import ru.vasys.keymouse.core.Settings;
 import ru.vasys.keymouse.service.MouseAccessibilityService;
 
 /** Public Intent surface for Key Mapper / Tasker / Automate / ADB. */
@@ -12,10 +15,20 @@ public final class ExternalTriggerReceiver extends BroadcastReceiver {
     public static final String PREFIX = "ru.vasys.keymouse.";
     public static final String EXTRA_KEY = "key";
 
+    public static void setComponentEnabled(Context context, boolean enabled) {
+        ComponentName component = new ComponentName(context, ExternalTriggerReceiver.class);
+        PackageManager pm = context.getPackageManager();
+        int desired = enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                : PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+        if (pm.getComponentEnabledSetting(component) == desired) return;
+        pm.setComponentEnabledSetting(component, desired, PackageManager.DONT_KILL_APP);
+    }
+
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (intent == null || !Settings.isExternalControlEnabled(context)) return;
         MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
-        if (service == null || intent == null) return;
+        if (service == null) return;
         String action = intent.getAction();
         if (action == null) return;
 

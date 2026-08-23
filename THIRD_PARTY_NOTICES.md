@@ -14,7 +14,6 @@ Used glyphs:
 - `plus`
 - `crop-free`
 - `image-filter-center-focus`
-- `selection-drag`
 
 Project: https://pictogrammers.com/library/mdi/
 

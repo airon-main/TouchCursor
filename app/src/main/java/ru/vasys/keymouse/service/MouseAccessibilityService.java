@@ -1,7 +1,7 @@
 package ru.vasys.keymouse.service;
 
 import android.accessibilityservice.AccessibilityService;
-import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
@@ -38,6 +38,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean triggerHeld;
     private boolean triggerLongFired;
     private Toast feedbackToast;
+    private float movementSpeed = 10f;
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
@@ -59,19 +60,19 @@ public final class MouseAccessibilityService extends AccessibilityService {
         settings = new Settings(this);
         bindings = settings.allBindings();
         pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges(), settings.cursorColor(), settings.cursorSizeDp());
-        enableKeyObservation();
+        movementSpeed = settings.speedPxPerTick();
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // We never inspect the view tree. The foreground package name is used only so the
-        // accessibility overlay can preserve the device's legacy policy_control immersive-nav
-        // behavior while the mouse is visible.
-        if (pointer == null || event == null || event.getPackageName() == null) return;
-        if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
-        String pkg = event.getPackageName().toString();
-        if ("com.android.systemui".equals(pkg)) return;
-        pointer.setForegroundPackage(pkg);
+        // Intentionally empty. KeyMouse does not inspect UI content or subscribe to
+        // accessibility events; Accessibility is used only for key filtering and gestures.
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (pointer != null) pointer.refreshDisplayBounds();
     }
 
     @Override
@@ -138,8 +139,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
                 cycleCursor();
             } else if (action.movement) {
                 if (pointer != null && pointer.isVisible()) {
-                    float speed = settings == null ? 10 : settings.speedPxPerTick();
-                    moveForActions(EnumSet.of(action), speed);
+                    moveForActions(EnumSet.of(action), movementSpeed);
                 }
             } else if (action == MouseAction.LEFT_BUTTON) {
                 actionDown(action);
@@ -175,17 +175,23 @@ public final class MouseAccessibilityService extends AccessibilityService {
         });
     }
 
+    public void previewCursorSizeDp(int sizeDp) {
+        main.post(() -> {
+            if (pointer != null) pointer.setCursorSizeDp(sizeDp);
+        });
+    }
+
     public void reloadSettings() {
         main.post(() -> {
             if (settings == null) settings = new Settings(this);
             bindings = settings.allBindings();
+            movementSpeed = settings.speedPxPerTick();
             if (pointer != null) {
                 pointer.setCursorStyle(settings.cursorStyle());
                 pointer.setWrapEdges(settings.wrapEdges());
                 pointer.setCursorColor(settings.cursorColor());
                 pointer.setCursorSizeDp(settings.cursorSizeDp());
             }
-            enableKeyObservation();
         });
     }
 
@@ -281,8 +287,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
                 stopTicker();
                 return;
             }
-            float speed = settings == null ? 10 : settings.speedPxPerTick();
-            moveForActions(pressed, speed);
+            moveForActions(pressed, movementSpeed);
             main.postDelayed(this, TICK_MS);
         }
     };
@@ -316,10 +321,4 @@ public final class MouseAccessibilityService extends AccessibilityService {
         main.removeCallbacks(triggerLongPress);
     }
 
-    private void enableKeyObservation() {
-        AccessibilityServiceInfo info = getServiceInfo();
-        if (info == null) return;
-        info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
-        setServiceInfo(info);
-    }
 }

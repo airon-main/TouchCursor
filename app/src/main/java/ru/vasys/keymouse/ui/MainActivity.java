@@ -35,6 +35,7 @@ import ru.vasys.keymouse.core.BindingState;
 import ru.vasys.keymouse.core.CursorColor;
 import ru.vasys.keymouse.core.CursorStyle;
 import ru.vasys.keymouse.core.MouseAction;
+import ru.vasys.keymouse.input.ExternalTriggerReceiver;
 import ru.vasys.keymouse.service.MouseAccessibilityService;
 
 public final class MainActivity extends Activity {
@@ -48,6 +49,7 @@ public final class MainActivity extends Activity {
     private Button cursorSwitchButton;
     private Button speedButton;
     private ImageView cursorAppearancePreview;
+    private CheckBox externalControlCheck;
     private CheckBox wrapEdgesCheck;
     private Spinner cursorColorSpinner;
     private TextView cursorSizeLabel;
@@ -57,6 +59,8 @@ public final class MainActivity extends Activity {
     private boolean cursorSetExpanded;
     private boolean refreshingCursorRows;
     private boolean refreshingCursorColor;
+    private boolean cursorSizeTracking;
+    private int pendingCursorSizeDp;
 
     private final Map<MouseAction, ImageButton> bindingButtons = new EnumMap<>(MouseAction.class);
     private final Map<CursorStyle, CheckBox> cursorChecks = new EnumMap<>(CursorStyle.class);
@@ -130,6 +134,17 @@ public final class MainActivity extends Activity {
         Button accessibility = button("Open Accessibility settings");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         root.addView(accessibility);
+
+        externalControlCheck = new CheckBox(this);
+        externalControlCheck.setText("Allow external control (Key Mapper / Tasker)");
+        externalControlCheck.setPadding(0, dp(4), 0, dp(4));
+        externalControlCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.externalControlEnabled() == isChecked) return;
+            settings.setExternalControlEnabled(isChecked);
+            ExternalTriggerReceiver.setComponentEnabled(this, isChecked);
+        });
+        root.addView(externalControlCheck);
+        root.addView(sectionDescription("Off by default. Enable only if another app should control KeyMouse through broadcast Intents."));
 
         root.addView(sectionHeading("Pointer"));
         root.addView(sectionDescription("Tune cursor movement and appearance. Preview updates immediately."));
@@ -210,14 +225,28 @@ public final class MainActivity extends Activity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (!fromUser) return;
                 int value = ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP + progress;
-                settings.setCursorSizeDp(value);
-                refreshCursorSize();
-                refreshCursorPreviews();
-                notifyService();
+                pendingCursorSizeDp = value;
+                refreshCursorSizeLabel(value);
+                refreshCursorPreviews(value);
+                previewCursorSize(value);
+                // Keyboard/D-pad SeekBar changes do not have a touch tracking lifecycle.
+                if (!cursorSizeTracking) {
+                    settings.setCursorSizeDp(value);
+                    notifyService();
+                }
             }
 
-            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
-            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                cursorSizeTracking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                cursorSizeTracking = false;
+                settings.setCursorSizeDp(pendingCursorSizeDp);
+                notifyService();
+            }
         });
         root.addView(cursorSizeSeek);
 
@@ -407,6 +436,7 @@ public final class MainActivity extends Activity {
 
     private void refreshAll() {
         refreshBindings();
+        refreshExternalControl();
         refreshCursorRows();
         refreshCursorSetVisibility();
         refreshSpeedButton();
@@ -456,6 +486,12 @@ public final class MainActivity extends Activity {
         if (speedButton != null) speedButton.setText("Cursor speed: " + settings.speedPxPerTick());
     }
 
+    private void refreshExternalControl() {
+        boolean enabled = settings.externalControlEnabled();
+        ExternalTriggerReceiver.setComponentEnabled(this, enabled);
+        if (externalControlCheck != null) externalControlCheck.setChecked(enabled);
+    }
+
     private void refreshWrapEdges() {
         if (wrapEdgesCheck != null) wrapEdgesCheck.setChecked(settings.wrapEdges());
     }
@@ -472,15 +508,25 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshCursorSize() {
-        if (cursorSizeLabel != null) cursorSizeLabel.setText("Cursor size: " + settings.cursorSizeDp() + " dp");
+        int value = settings.cursorSizeDp();
+        pendingCursorSizeDp = value;
+        refreshCursorSizeLabel(value);
         if (cursorSizeSeek != null) {
-            int progress = settings.cursorSizeDp() - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP;
+            int progress = value - ru.vasys.keymouse.core.Settings.MIN_CURSOR_SIZE_DP;
             cursorSizeSeek.setProgress(progress);
         }
     }
 
+    private void refreshCursorSizeLabel(int value) {
+        if (cursorSizeLabel != null) cursorSizeLabel.setText("Cursor size: " + value + " dp");
+    }
+
     private void refreshCursorPreviews() {
-        int size = dp(settings.cursorSizeDp());
+        refreshCursorPreviews(settings.cursorSizeDp());
+    }
+
+    private void refreshCursorPreviews(int sizeDp) {
+        int size = dp(sizeDp);
         int tint = settings.cursorColor().argb;
         if (cursorAppearancePreview != null) {
             cursorAppearancePreview.setImageResource(settings.cursorStyle().drawableRes);
@@ -498,6 +544,11 @@ public final class MainActivity extends Activity {
             lp.height = size;
             preview.setLayoutParams(lp);
         }
+    }
+
+    private void previewCursorSize(int sizeDp) {
+        MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
+        if (service != null) service.previewCursorSizeDp(sizeDp);
     }
 
     private void notifyService() {

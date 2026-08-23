@@ -44,7 +44,11 @@ public final class ContinuousTouchController {
         runOnMain(() -> {
             targetX = x;
             targetY = y;
-            if (!requestedDown || busy || stroke == null) return;
+            if (!requestedDown || busy) return;
+            if (stroke == null) {
+                dispatchStart(targetX, targetY);
+                return;
+            }
             if (distance(currentX, currentY, targetX, targetY) >= 0.5f) dispatchMove();
         });
     }
@@ -150,12 +154,12 @@ public final class ContinuousTouchController {
 
                     @Override
                     public void onCancelled(GestureDescription gestureDescription) {
+                        // Do not spin trying to immediately reclaim a cancelled gesture. A real
+                        // touch, another accessibility service or SystemUI may have taken over.
+                        // If the physical hold is still active, the next move will restart lazily.
                         busy = false;
                         stroke = null;
-                        if (requestedDown) {
-                            restartAfterRelease = false;
-                            dispatchStart(targetX, targetY);
-                        }
+                        restartAfterRelease = false;
                     }
                 }, main);
         if (!accepted) {

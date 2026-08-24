@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
@@ -137,7 +138,7 @@ public final class MainActivity extends Activity {
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         TextView title = text("KeyCursor", 28);
-        title.setTypeface(null, 1);
+        title.setTypeface(null, Typeface.BOLD);
         title.setPadding(dp(2), 0, 0, 0);
         root.addView(title);
 
@@ -715,7 +716,7 @@ public final class MainActivity extends Activity {
         card.setLayoutParams(lp);
 
         TextView heading = text(title, 18);
-        heading.setTypeface(null, 1);
+        heading.setTypeface(null, Typeface.BOLD);
         heading.setPadding(0, 0, 0, dp(2));
         card.addView(heading);
 
@@ -729,7 +730,7 @@ public final class MainActivity extends Activity {
 
     private TextView subheading(String value) {
         TextView t = text(value, 13);
-        t.setTypeface(null, 1);
+        t.setTypeface(null, Typeface.BOLD);
         t.setTextColor(themeColor(android.R.attr.textColorSecondary, Color.DKGRAY));
         t.setPadding(0, dp(10), 0, dp(2));
         return t;
@@ -737,7 +738,7 @@ public final class MainActivity extends Activity {
 
     private TextView settingLabel(String value) {
         TextView t = text(value, 14);
-        t.setTypeface(null, 1);
+        t.setTypeface(null, Typeface.BOLD);
         t.setPadding(0, dp(8), 0, dp(2));
         return t;
     }
@@ -749,7 +750,7 @@ public final class MainActivity extends Activity {
         row.setPadding(0, dp(4), 0, dp(4));
 
         TextView name = text(label, 14);
-        name.setTypeface(null, 1);
+        name.setTypeface(null, Typeface.BOLD);
         row.addView(name, weighted());
 
         LinearLayout.LayoutParams controlParams = new LinearLayout.LayoutParams(dp(88), -2);

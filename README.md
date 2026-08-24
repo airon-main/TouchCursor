@@ -67,40 +67,6 @@ Requires JDK 17 and Android SDK 35.
 ./gradlew :app:assembleDebug
 ```
 
-### Signed release APK
-
-Create the signing key once and keep it safe. The same key is required for future updates:
-
-```sh
-keytool -genkeypair -v \
-  -keystore keycursor-release.jks \
-  -alias keycursor \
-  -keyalg RSA -keysize 4096 -validity 10000
-```
-
-Copy `keystore.properties.example` to `keystore.properties` and fill in the real path/passwords:
-
-```properties
-storeFile=/absolute/path/to/keycursor-release.jks
-storePassword=...
-keyAlias=keycursor
-keyPassword=...
-```
-
-Then build. If `keystore.properties` is absent, Gradle still produces an unsigned release for CI checks; with the file present, the APK is signed automatically.
-
-```sh
-./gradlew clean :app:assembleRelease
-```
-
-The signed APK is written to:
-
-```text
-app/build/outputs/apk/release/app-release.apk
-```
-
-`keystore.properties`, `*.jks` and `*.keystore` are ignored by Git. Do not commit the private signing key.
-
 ## Notes
 
 Android allows only one enabled Accessibility service to own hardware key filtering at a time. If another accessibility remapper owns that stream, use KeyCursor's external broadcast backend instead.

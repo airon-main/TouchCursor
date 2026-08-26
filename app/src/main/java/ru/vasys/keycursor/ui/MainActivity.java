@@ -56,6 +56,7 @@ public final class MainActivity extends Activity {
     private Button speedButton;
     private CursorGlyphView cursorAppearancePreview;
     private Switch externalControlCheck;
+    private Switch captureMouseKeyCheck;
     private Switch wrapEdgesCheck;
     private Switch rotateLandscapeCheck;
     private Switch invertHorizontalPortraitCheck;
@@ -355,7 +356,7 @@ public final class MainActivity extends Activity {
     private View buildBindingsCard() {
         LinearLayout card = card(
                 "Bindings",
-                "Hold Mouse key to show or hide the cursor. Single press toggles Normal / Hold; double press selects Scroll.");
+                "Hold Mouse key to show or hide the cursor. Single press toggles Normal / Hold; double press toggles Scroll.");
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
@@ -391,6 +392,14 @@ public final class MainActivity extends Activity {
         primary.addView(cursorSwitchButton, cursorSwitchParams);
         card.addView(primary);
 
+        captureMouseKeyCheck = optionSwitch("Capture Mouse key while cursor is visible");
+        captureMouseKeyCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.captureMouseKeyVisible() == isChecked) return;
+            settings.setCaptureMouseKeyVisible(isChecked);
+            notifyService();
+        });
+        card.addView(captureMouseKeyCheck);
+
         LinearLayout legend = new LinearLayout(this);
         legend.setOrientation(LinearLayout.HORIZONTAL);
         legend.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -401,7 +410,7 @@ public final class MainActivity extends Activity {
         card.addView(legend);
 
         TextView footer = sectionDescription(
-                "Hidden: keys pass through. Visible: movement and click are captured. Tap to bind · hold to clear · focus to show key ID.");
+                "Hidden: keys pass through. Visible: movement and click are captured; Mouse key is also captured when enabled above. Tap to bind · hold to clear · focus to show key ID.");
         footer.setPadding(0, dp(8), 0, 0);
         card.addView(footer);
         return card;
@@ -539,6 +548,7 @@ public final class MainActivity extends Activity {
 
     private void refreshAll() {
         refreshBindings();
+        refreshMouseKeyCapture();
         refreshExternalControl();
         refreshCursorRows();
         refreshCursorSetVisibility();
@@ -597,6 +607,10 @@ public final class MainActivity extends Activity {
 
     private void refreshSpeedButton() {
         if (speedButton != null) speedButton.setText(String.valueOf(settings.speedPxPerTick()));
+    }
+
+    private void refreshMouseKeyCapture() {
+        if (captureMouseKeyCheck != null) captureMouseKeyCheck.setChecked(settings.captureMouseKeyVisible());
     }
 
     private void refreshExternalControl() {

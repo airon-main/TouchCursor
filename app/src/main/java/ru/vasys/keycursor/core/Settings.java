@@ -27,6 +27,7 @@ public final class Settings {
     private static final String INVERT_X_LANDSCAPE = "invert_x_landscape";
     private static final String INVERT_Y_LANDSCAPE = "invert_y_landscape";
     private static final String BLEND_DIRECTIONS = "blend_directions";
+    private static final String CAPTURE_MOUSE_KEY_VISIBLE = "capture_mouse_key_visible";
     private static final int CURRENT_CURSOR_SET_VERSION = 3;
     public static final int DEFAULT_CURSOR_SIZE_DP = 42;
     public static final int MIN_CURSOR_SIZE_DP = 24;
@@ -289,6 +290,14 @@ public final class Settings {
 
     public void setBlendDirections(boolean enabled) {
         prefs.edit().putBoolean(BLEND_DIRECTIONS, enabled).apply();
+    }
+
+    public boolean captureMouseKeyVisible() {
+        return prefs.getBoolean(CAPTURE_MOUSE_KEY_VISIBLE, true);
+    }
+
+    public void setCaptureMouseKeyVisible(boolean enabled) {
+        prefs.edit().putBoolean(CAPTURE_MOUSE_KEY_VISIBLE, enabled).apply();
     }
 
     public boolean wrapEdges() {

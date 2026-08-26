@@ -13,6 +13,7 @@ public final class PointerController {
 
     private boolean leftHeld;
     private MouseMode mode = MouseMode.NORMAL;
+    private MouseMode lastNonScrollMode = MouseMode.NORMAL;
 
     public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges,
                              CursorColor cursorColor, int cursorSizeDp) {
@@ -54,18 +55,30 @@ public final class PointerController {
 
     public void setMode(MouseMode next) {
         if (!overlay.isVisible() || next == null || mode == next) return;
+        if (next == MouseMode.SCROLL) {
+            if (mode != MouseMode.SCROLL) lastNonScrollMode = mode;
+        } else {
+            lastNonScrollMode = next;
+        }
         mode = next;
         overlay.setMouseMode(mode);
         syncTouchState();
     }
 
     public void toggleNormalHoldMode() {
+        if (mode == MouseMode.SCROLL) return;
         setMode(mode == MouseMode.NORMAL ? MouseMode.HOLD : MouseMode.NORMAL);
+    }
+
+    public void toggleScrollMode() {
+        if (mode == MouseMode.SCROLL) setMode(lastNonScrollMode);
+        else setMode(MouseMode.SCROLL);
     }
 
     public void show() {
         if (overlay.isVisible()) return;
         mode = MouseMode.NORMAL;
+        lastNonScrollMode = MouseMode.NORMAL;
         leftHeld = false;
         overlay.setMouseMode(mode);
         overlay.setVisible(true);
@@ -74,6 +87,7 @@ public final class PointerController {
     public void hide() {
         leftHeld = false;
         mode = MouseMode.NORMAL;
+        lastNonScrollMode = MouseMode.NORMAL;
         overlay.setMouseMode(mode);
         if (touch.isRequestedDown()) touch.release();
         overlay.setVisible(false);

@@ -9,7 +9,7 @@ KeyCursor turns hardware keys into a real touch cursor with movement, click-and-
 - 8-direction movement and fully configurable bindings
 - real touch DOWN / MOVE / UP for click, hold and drag
 - three mouse modes: Normal, Hold and Scroll
-- single Mouse-key press toggles Normal / Hold; double press selects Scroll
+- single Mouse-key press toggles Normal / Hold; double press toggles Scroll on/off
 - Scroll mode uses Android Accessibility scroll actions on the scrollable element under the cursor
 - optional edge wrapping
 - configurable cursor style, color and size
@@ -32,11 +32,11 @@ Tested on **Fujitsu F-03L** (Android 8.1).
 2. Open **Accessibility settings** from the app and enable **KeyCursor input service**.
 3. Bind **Mouse key** and any directions your device does not report as the standard D-pad.
 4. Hold Mouse key to show or hide the cursor.
-5. While visible, single-press Mouse key to toggle **Normal / Hold** or double-press it for **Scroll**.
+5. While visible, single-press Mouse key to toggle **Normal / Hold** or double-press it to enter/leave **Scroll**.
 
 **Normal** moves the cursor and uses the click binding for click/drag. **Hold** keeps a virtual finger down while the cursor moves. **Scroll** uses the direction bindings as directional scroll actions instead of moving the cursor.
 
-When the cursor is hidden, keys pass through normally. While it is visible, movement/click/cursor-switch keys are consumed so Android focus does not move at the same time. Mouse key itself stays pass-through.
+When the cursor is hidden, keys pass through normally. While it is visible, movement/click/cursor-switch keys are consumed so Android focus does not move at the same time. **Capture Mouse key while cursor is visible** can also consume the Mouse key only while the cursor is active, letting the same physical key keep an app shortcut when KeyCursor is hidden.
 
 ## Direction behavior
 

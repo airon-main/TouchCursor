@@ -22,7 +22,9 @@ The cursor overlay exists only while mouse mode is visible. Cursor position is l
 - **Hold** — keeps one synthetic finger held at the cursor continuously. This is the previous Scroll-mode gesture behavior and uses `StrokeDescription.continueStroke()` while the cursor moves.
 - **Scroll** — movement bindings perform Accessibility `ACTION_SCROLL_*` on the scrollable element under the cursor instead of dragging a synthetic finger.
 
-Holding Mouse key shows/hides the cursor. A single short press toggles Normal / Hold; a double press selects Scroll. The single-press mode change is committed after Android's double-tap window so the first tap of a double press cannot briefly inject a Hold touch.
+Holding Mouse key shows/hides the cursor. A single short press toggles Normal / Hold; a double press toggles Scroll. Entering Scroll remembers the previous Normal/Hold mode, and the next double press restores it. The single-press mode change is committed after Android's double-tap window so the first tap of a double press cannot briefly inject a Hold touch.
+
+Optionally, the Mouse key itself is consumed only while the cursor is visible. The consume/pass-through decision is fixed on key DOWN and reused through key UP, so a long press that changes cursor visibility cannot leak half of a key sequence to another app. When the cursor is hidden, the Mouse key always passes through.
 
 Gesture cancellation clears the active stroke and waits for the next physical movement instead of retrying in a loop.
 

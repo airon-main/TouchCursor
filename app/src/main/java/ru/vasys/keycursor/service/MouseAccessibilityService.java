@@ -26,7 +26,8 @@ import ru.vasys.keycursor.core.Settings;
  * Accessibility is used as the gesture backend and hardware-key router.
  * When the mouse is hidden, bound keys pass through untouched. While the mouse is visible,
  * mouse-control keys are consumed so Android focus/navigation does not run in parallel.
- * The Mouse key itself is always allowed to pass through for interoperability.
+ * The Mouse key can optionally be captured while the cursor is visible, allowing the same
+ * physical key to keep its normal app binding whenever the mouse is hidden.
  */
 public final class MouseAccessibilityService extends AccessibilityService {
     private static volatile MouseAccessibilityService runningInstance;
@@ -36,6 +37,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EnumSet<MouseAction> pressed = EnumSet.noneOf(MouseAction.class);
     private final Map<Long, MouseAction> heldKeyActions = new HashMap<>();
+    private final Map<Long, Boolean> heldTriggerCapture = new HashMap<>();
 
     private Settings settings;
     private PointerController pointer;
@@ -55,6 +57,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean invertHorizontalLandscape;
     private boolean invertVerticalLandscape;
     private boolean blendDirections;
+    private boolean captureMouseKeyVisible;
     private final float[] resolvedDirection = new float[2];
 
     private final Runnable triggerLongPress = new Runnable() {
@@ -89,6 +92,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         pointer = new PointerController(this, settings.cursorStyle(), settings.wrapEdges(), settings.cursorColor(), settings.cursorSizeDp());
         movementSpeed = settings.speedPxPerTick();
         reloadDirectionPreferences();
+        captureMouseKeyVisible = settings.captureMouseKeyVisible();
         refreshDisplayRotation();
     }
 
@@ -154,12 +158,25 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (action == null) return false;
 
         if (action == MouseAction.TRIGGER) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) actionDown(action);
-            else if (event.getAction() == KeyEvent.ACTION_UP) actionUp(action);
-
-            // Keep the trigger interoperable with KeyMapper/other apps. It must use the same
-            // pass-through policy for DOWN and UP even if a long press changes visibility.
-            return false;
+            boolean capture;
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                // Decide once at DOWN and keep the same policy for the whole physical press. A
+                // long press can show/hide the cursor before UP, and leaking only half of a key
+                // sequence to another app would create stuck or phantom shortcuts.
+                capture = captureMouseKeyVisible && pointer != null && pointer.isVisible();
+                heldTriggerCapture.put(keyToken, capture);
+                actionDown(action);
+            } else {
+                Boolean heldCapture = heldTriggerCapture.get(keyToken);
+                capture = heldCapture != null
+                        ? heldCapture
+                        : captureMouseKeyVisible && pointer != null && pointer.isVisible();
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    actionUp(action);
+                    heldTriggerCapture.remove(keyToken);
+                }
+            }
+            return capture;
         }
 
         // Hidden mouse means the keypad behaves exactly like a normal Android keypad.
@@ -257,6 +274,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
             bindings = settings.allBindings();
             movementSpeed = settings.speedPxPerTick();
             reloadDirectionPreferences();
+            captureMouseKeyVisible = settings.captureMouseKeyVisible();
             if (pointer != null) {
                 pointer.setCursorStyle(settings.cursorStyle());
                 pointer.setWrapEdges(settings.wrapEdges());
@@ -338,7 +356,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
         if (triggerSecondTapCandidate) {
             triggerSecondTapCandidate = false;
-            selectScrollMode();
+            toggleScrollMode();
         } else {
             scheduleSinglePress();
         }
@@ -351,7 +369,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         }
         if (triggerSinglePending) {
             cancelPendingSinglePress();
-            selectScrollMode();
+            toggleScrollMode();
         } else {
             scheduleSinglePress();
         }
@@ -375,15 +393,21 @@ public final class MouseAccessibilityService extends AccessibilityService {
     }
 
     private void selectNextNormalHoldMode() {
-        if (pointer == null || !pointer.isVisible()) return;
+        if (pointer == null || !pointer.isVisible() || pointer.mode() == MouseMode.SCROLL) return;
         pointer.toggleNormalHoldMode();
         showToast(pointer.mode() == MouseMode.HOLD ? "Mouse mode: Hold" : "Mouse mode: Normal");
     }
 
-    private void selectScrollMode() {
+    private void toggleScrollMode() {
         if (pointer == null || !pointer.isVisible()) return;
-        pointer.setMode(MouseMode.SCROLL);
-        showToast("Mouse mode: Scroll");
+        pointer.toggleScrollMode();
+        showToast("Mouse mode: " + modeLabel(pointer.mode()));
+    }
+
+    private String modeLabel(MouseMode mode) {
+        if (mode == MouseMode.HOLD) return "Hold";
+        if (mode == MouseMode.SCROLL) return "Scroll";
+        return "Normal";
     }
 
     private void toggleMouseVisibility() {
@@ -511,6 +535,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private void resetInputState() {
         pressed.clear();
         heldKeyActions.clear();
+        heldTriggerCapture.clear();
         stopTicker();
         triggerHeld = false;
         triggerLongFired = false;

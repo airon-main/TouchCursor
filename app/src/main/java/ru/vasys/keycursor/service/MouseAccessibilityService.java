@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.Surface;
 import android.view.WindowManager;
@@ -42,6 +43,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean calibrationMode;
     private boolean triggerHeld;
     private boolean triggerLongFired;
+    private long lastTriggerShortUptime;
     private Toast feedbackToast;
     private float movementSpeed = 10f;
     private int displayRotation;
@@ -50,12 +52,14 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean invertVerticalPortrait;
     private boolean invertHorizontalLandscape;
     private boolean invertVerticalLandscape;
+    private boolean blendDirections;
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
         public void run() {
             if (!triggerHeld || pointer == null) return;
             triggerLongFired = true;
+            lastTriggerShortUptime = 0L;
             toggleMouseVisibility();
         }
     };
@@ -205,7 +209,12 @@ public final class MouseAccessibilityService extends AccessibilityService {
     }
 
     public void externalModeToggle() {
-        main.post(this::triggerShort);
+        main.post(() -> {
+            if (pointer == null || !pointer.isVisible()) return;
+            lastTriggerShortUptime = 0L;
+            pointer.toggleScrollMode();
+            showToast(pointer.isScrollMode() ? "Mouse mode: Scroll" : "Mouse mode: Normal");
+        });
     }
 
     public void externalCursorNext() {
@@ -302,13 +311,25 @@ public final class MouseAccessibilityService extends AccessibilityService {
     }
 
     private void triggerShort() {
-        if (pointer == null || !pointer.isVisible()) return;
-        pointer.toggleScrollMode();
-        showToast(pointer.isScrollMode() ? "Mouse mode: Scroll" : "Mouse mode: Normal");
+        if (pointer == null || !pointer.isVisible()) {
+            lastTriggerShortUptime = 0L;
+            return;
+        }
+
+        // Apply Normal immediately on the first short press. A second short press inside the
+        // platform double-tap window upgrades the selection to Scroll without delaying the first.
+        long now = SystemClock.uptimeMillis();
+        boolean doublePress = lastTriggerShortUptime > 0L
+                && now - lastTriggerShortUptime <= ViewConfiguration.getDoubleTapTimeout();
+        lastTriggerShortUptime = doublePress ? 0L : now;
+
+        pointer.setScrollMode(doublePress);
+        showToast(doublePress ? "Mouse mode: Scroll" : "Mouse mode: Normal");
     }
 
     private void toggleMouseVisibility() {
         if (pointer == null) return;
+        lastTriggerShortUptime = 0L;
         if (pointer.isVisible()) {
             pressed.clear();
             stopTicker();
@@ -352,21 +373,33 @@ public final class MouseAccessibilityService extends AccessibilityService {
     };
 
     private void moveForActions(Iterable<MouseAction> actions, float speed) {
-        int vx = 0;
-        int vy = 0;
+        float vx = 0f;
+        float vy = 0f;
         for (MouseAction action : actions) {
             if (!action.movement) continue;
-            vx += action.dx;
-            vy += action.dy;
+            // In blend mode each bound direction contributes a unit vector. This makes e.g.
+            // UP + UP_LEFT resolve to the exact 22.5-degree direction between them.
+            float actionScale = blendDirections && action.dx != 0 && action.dy != 0
+                    ? 0.70710678f : 1f;
+            vx += action.dx * actionScale;
+            vy += action.dy * actionScale;
         }
-        if ((vx == 0 && vy == 0) || pointer == null) return;
-        vx = Integer.signum(vx);
-        vy = Integer.signum(vy);
+        if (pointer == null) return;
+
+        if (!blendDirections) {
+            vx = Math.signum(vx);
+            vy = Math.signum(vy);
+        }
+
+        float length = (float) Math.sqrt(vx * vx + vy * vy);
+        if (length < 0.0001f) return;
+        vx /= length;
+        vy /= length;
 
         boolean landscape = displayRotation == Surface.ROTATION_90
                 || displayRotation == Surface.ROTATION_270;
         if (landscape && rotateLandscapeControls) {
-            int originalX = vx;
+            float originalX = vx;
             if (displayRotation == Surface.ROTATION_90) {
                 vx = vy;
                 vy = -originalX;
@@ -381,8 +414,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (invertX) vx = -vx;
         if (invertY) vy = -vy;
 
-        float scale = (vx != 0 && vy != 0) ? 0.70710678f : 1f;
-        pointer.move(vx * speed * scale, vy * speed * scale);
+        pointer.move(vx * speed, vy * speed);
     }
 
     private void reloadDirectionPreferences() {
@@ -392,6 +424,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         invertVerticalPortrait = settings.invertVerticalPortrait();
         invertHorizontalLandscape = settings.invertHorizontalLandscape();
         invertVerticalLandscape = settings.invertVerticalLandscape();
+        blendDirections = settings.blendDirections();
     }
 
     private void showToast(String message) {
@@ -406,6 +439,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         stopTicker();
         triggerHeld = false;
         triggerLongFired = false;
+        lastTriggerShortUptime = 0L;
         main.removeCallbacks(triggerLongPress);
     }
 

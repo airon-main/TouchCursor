@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private Switch invertVerticalPortraitCheck;
     private Switch invertHorizontalLandscapeCheck;
     private Switch invertVerticalLandscapeCheck;
+    private Switch blendDirectionsCheck;
     private Spinner cursorColorSpinner;
     private TextView cursorSizeLabel;
     private SeekBar cursorSizeSeek;
@@ -297,7 +298,7 @@ public final class MainActivity extends Activity {
     private View buildDirectionCard() {
         LinearLayout card = card(
                 "Direction",
-                "Rotate physical controls with the device, then optionally invert each axis.");
+                "Rotate or invert controls, and optionally blend held directions into intermediate angles.");
 
         rotateLandscapeCheck = optionSwitch("Rotate controls in landscape");
         rotateLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -306,6 +307,14 @@ public final class MainActivity extends Activity {
             notifyService();
         });
         card.addView(rotateLandscapeCheck);
+
+        blendDirectionsCheck = optionSwitch("Blend simultaneous directions");
+        blendDirectionsCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (settings.blendDirections() == isChecked) return;
+            settings.setBlendDirections(isChecked);
+            notifyService();
+        });
+        card.addView(blendDirectionsCheck);
 
         card.addView(subheading("Portrait"));
         invertHorizontalPortraitCheck = optionSwitch("Invert left / right");
@@ -346,7 +355,7 @@ public final class MainActivity extends Activity {
     private View buildBindingsCard() {
         LinearLayout card = card(
                 "Bindings",
-                "Hold Mouse key to show or hide the cursor. Tap it while visible to switch Normal / Scroll.");
+                "Hold Mouse key to show or hide the cursor. Single press selects Normal; double press selects Scroll.");
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
@@ -547,6 +556,7 @@ public final class MainActivity extends Activity {
         if (invertVerticalPortraitCheck != null) invertVerticalPortraitCheck.setChecked(settings.invertVerticalPortrait());
         if (invertHorizontalLandscapeCheck != null) invertHorizontalLandscapeCheck.setChecked(settings.invertHorizontalLandscape());
         if (invertVerticalLandscapeCheck != null) invertVerticalLandscapeCheck.setChecked(settings.invertVerticalLandscape());
+        if (blendDirectionsCheck != null) blendDirectionsCheck.setChecked(settings.blendDirections());
     }
 
     private void refreshBindings() {

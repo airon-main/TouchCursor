@@ -43,11 +43,15 @@ public final class PointerController {
         syncTouchState();
     }
 
-    public void toggleScrollMode() {
-        if (!overlay.isVisible()) return;
-        scrollMode = !scrollMode;
+    public void setScrollMode(boolean enabled) {
+        if (!overlay.isVisible() || scrollMode == enabled) return;
+        scrollMode = enabled;
         overlay.setScrollMode(scrollMode);
         syncTouchState();
+    }
+
+    public void toggleScrollMode() {
+        setScrollMode(!scrollMode);
     }
 
     public void show() {

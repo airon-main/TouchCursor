@@ -9,11 +9,12 @@ KeyCursor turns hardware keys into a real touch cursor: movement, click-and-hold
 - 8-direction movement and fully configurable bindings
 - real touch DOWN / MOVE / UP for hold and drag
 - continuous Scroll mode with Android continued gesture strokes
-- short Mouse-key press switches Normal / Scroll while the cursor is visible
+- single Mouse-key press selects Normal mode; double press selects Scroll mode
 - optional edge wrapping
 - configurable cursor style, color and size
 - separate portrait / landscape direction inversion
 - optional landscape control rotation with the display
+- optional blending of simultaneously held directions into intermediate angles
 - system light / dark theme
 - optional broadcast control for Key Mapper, Tasker, Automate or ADB
 - no network permission, analytics or ads
@@ -29,7 +30,7 @@ Tested on **Fujitsu F-03L** (Android 8.1).
 1. Install KeyCursor.
 2. Open **Accessibility settings** from the app and enable **KeyCursor input service**.
 3. Bind **Mouse key** and any directions your device does not report as the standard D-pad.
-4. Hold Mouse key to show or hide the cursor.
+4. Hold Mouse key to show or hide the cursor. Single press selects Normal mode; double press selects Scroll mode.
 
 When the cursor is hidden, keys pass through normally. While it is visible, movement/click/cursor-switch keys are consumed so Android focus does not move at the same time. Mouse key itself stays pass-through.
 
@@ -40,10 +41,11 @@ Hardware bindings are matched as physical keys first. Android-rotated D-pad key 
 In settings you can additionally:
 
 - **Rotate controls with screen in landscape** — physical Up rotates into the screen direction after the device is turned;
+- **Blend simultaneous directions** — adjacent held directions are combined into an intermediate angle while preserving constant pointer speed;
 - invert left/right separately in portrait and landscape;
 - invert up/down separately in portrait and landscape.
 
-Inversion is applied after landscape rotation.
+Direction blending happens before landscape rotation and inversion.
 
 ## External control
 

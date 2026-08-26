@@ -151,8 +151,8 @@ public final class MainActivity extends Activity {
 
         root.addView(buildAccessibilityCard());
         root.addView(buildPointerCard());
-        root.addView(buildDirectionCard());
         root.addView(buildBindingsCard());
+        root.addView(buildDirectionCard());
         root.addView(buildExternalControlCard());
 
         refreshAll();
@@ -166,6 +166,7 @@ public final class MainActivity extends Activity {
         Button accessibility = button("Open Accessibility settings");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         card.addView(accessibility);
+
         return card;
     }
 
@@ -317,39 +318,37 @@ public final class MainActivity extends Activity {
         });
         card.addView(blendDirectionsCheck);
 
-        card.addView(subheading("Portrait"));
-        invertHorizontalPortraitCheck = optionSwitch("Invert left / right");
+        card.addView(subheading("Portrait · invert"));
+        invertHorizontalPortraitCheck = optionSwitch("Left / right");
         invertHorizontalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertHorizontalPortrait() == isChecked) return;
             settings.setInvertHorizontalPortrait(isChecked);
             notifyService();
         });
-        card.addView(invertHorizontalPortraitCheck);
 
-        invertVerticalPortraitCheck = optionSwitch("Invert up / down");
+        invertVerticalPortraitCheck = optionSwitch("Up / down");
         invertVerticalPortraitCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertVerticalPortrait() == isChecked) return;
             settings.setInvertVerticalPortrait(isChecked);
             notifyService();
         });
-        card.addView(invertVerticalPortraitCheck);
+        card.addView(optionPair(invertHorizontalPortraitCheck, invertVerticalPortraitCheck));
 
-        card.addView(subheading("Landscape"));
-        invertHorizontalLandscapeCheck = optionSwitch("Invert left / right");
+        card.addView(subheading("Landscape · invert"));
+        invertHorizontalLandscapeCheck = optionSwitch("Left / right");
         invertHorizontalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertHorizontalLandscape() == isChecked) return;
             settings.setInvertHorizontalLandscape(isChecked);
             notifyService();
         });
-        card.addView(invertHorizontalLandscapeCheck);
 
-        invertVerticalLandscapeCheck = optionSwitch("Invert up / down");
+        invertVerticalLandscapeCheck = optionSwitch("Up / down");
         invertVerticalLandscapeCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.invertVerticalLandscape() == isChecked) return;
             settings.setInvertVerticalLandscape(isChecked);
             notifyService();
         });
-        card.addView(invertVerticalLandscapeCheck);
+        card.addView(optionPair(invertHorizontalLandscapeCheck, invertVerticalLandscapeCheck));
         return card;
     }
 
@@ -392,6 +391,21 @@ public final class MainActivity extends Activity {
         primary.addView(cursorSwitchButton, cursorSwitchParams);
         card.addView(primary);
 
+        TextView footer = sectionDescription(
+                "Tap to bind · hold to clear · focus to show key ID.");
+        footer.setPadding(0, dp(4), 0, 0);
+        card.addView(footer);
+
+        LinearLayout legend = new LinearLayout(this);
+        legend.setOrientation(LinearLayout.HORIZONTAL);
+        legend.setGravity(Gravity.CENTER_HORIZONTAL);
+        legend.setPadding(0, dp(4), 0, dp(8));
+        legend.addView(legendItem("unbound", bindingColor(BindingState.NONE)));
+        legend.addView(legendItem("default", bindingColor(BindingState.DEFAULT)));
+        legend.addView(legendItem("custom", bindingColor(BindingState.CUSTOM)));
+        card.addView(legend);
+        
+        card.addView(subheading("Input capture"));
         captureMouseKeyCheck = optionSwitch("Capture Mouse key while cursor is visible");
         captureMouseKeyCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (settings.captureMouseKeyVisible() == isChecked) return;
@@ -399,20 +413,8 @@ public final class MainActivity extends Activity {
             notifyService();
         });
         card.addView(captureMouseKeyCheck);
-
-        LinearLayout legend = new LinearLayout(this);
-        legend.setOrientation(LinearLayout.HORIZONTAL);
-        legend.setGravity(Gravity.CENTER_HORIZONTAL);
-        legend.setPadding(0, dp(8), 0, 0);
-        legend.addView(legendItem("unbound", bindingColor(BindingState.NONE)));
-        legend.addView(legendItem("default", bindingColor(BindingState.DEFAULT)));
-        legend.addView(legendItem("custom", bindingColor(BindingState.CUSTOM)));
-        card.addView(legend);
-
-        TextView footer = sectionDescription(
-                "Hidden: keys pass through. Visible: movement and click are captured; Mouse key is also captured when enabled above. Tap to bind · hold to clear · focus to show key ID.");
-        footer.setPadding(0, dp(8), 0, 0);
-        card.addView(footer);
+        card.addView(sectionDescription(
+                "Hidden: Mouse key passes through. Visible: KeyCursor consumes it for normal Android input; other remappers may still receive the key independently."));
         return card;
     }
 
@@ -779,6 +781,21 @@ public final class MainActivity extends Activity {
 
         LinearLayout.LayoutParams controlParams = new LinearLayout.LayoutParams(dp(88), -2);
         row.addView(control, controlParams);
+        return row;
+    }
+
+    private View optionPair(Switch left, Switch right) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout.LayoutParams leftParams = weighted();
+        leftParams.rightMargin = dp(4);
+        row.addView(left, leftParams);
+
+        LinearLayout.LayoutParams rightParams = weighted();
+        rightParams.leftMargin = dp(4);
+        row.addView(right, rightParams);
         return row;
     }
 

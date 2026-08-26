@@ -17,6 +17,7 @@ KeyCursor turns hardware keys into a real touch cursor with movement, click-and-
 - optional landscape control rotation with the display
 - optional blending of simultaneously held directions into intermediate angles
 - system light / dark theme
+- optional Mouse-key capture while the cursor is visible
 - optional broadcast control for Key Mapper, Tasker, Automate or ADB
 - no network permission, analytics or ads
 

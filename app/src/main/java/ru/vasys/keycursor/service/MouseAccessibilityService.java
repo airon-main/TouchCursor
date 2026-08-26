@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.Surface;
 import android.view.WindowManager;
@@ -20,6 +19,7 @@ import ru.vasys.keycursor.core.Binding;
 import ru.vasys.keycursor.core.CursorStyle;
 import ru.vasys.keycursor.core.DpadKeyNormalizer;
 import ru.vasys.keycursor.core.MouseAction;
+import ru.vasys.keycursor.core.MouseMode;
 import ru.vasys.keycursor.core.Settings;
 
 /**
@@ -31,6 +31,7 @@ import ru.vasys.keycursor.core.Settings;
 public final class MouseAccessibilityService extends AccessibilityService {
     private static volatile MouseAccessibilityService runningInstance;
     private static final long TICK_MS = 16;
+    private static final long SCROLL_REPEAT_MS = 160;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EnumSet<MouseAction> pressed = EnumSet.noneOf(MouseAction.class);
@@ -43,7 +44,8 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean calibrationMode;
     private boolean triggerHeld;
     private boolean triggerLongFired;
-    private long lastTriggerShortUptime;
+    private boolean triggerSecondTapCandidate;
+    private boolean triggerSinglePending;
     private Toast feedbackToast;
     private float movementSpeed = 10f;
     private int displayRotation;
@@ -53,14 +55,24 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private boolean invertHorizontalLandscape;
     private boolean invertVerticalLandscape;
     private boolean blendDirections;
+    private final float[] resolvedDirection = new float[2];
 
     private final Runnable triggerLongPress = new Runnable() {
         @Override
         public void run() {
             if (!triggerHeld || pointer == null) return;
             triggerLongFired = true;
-            lastTriggerShortUptime = 0L;
+            triggerSecondTapCandidate = false;
+            cancelPendingSinglePress();
             toggleMouseVisibility();
+        }
+    };
+
+    private final Runnable triggerSinglePress = new Runnable() {
+        @Override
+        public void run() {
+            triggerSinglePending = false;
+            selectNextNormalHoldMode();
         }
     };
 
@@ -82,8 +94,8 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Intentionally empty. KeyCursor does not inspect UI content or subscribe to
-        // accessibility events; Accessibility is used only for key filtering and gestures.
+        // Intentionally empty. Scroll mode retrieves the active node tree only on a user-requested
+        // scroll tick; KeyCursor still does not subscribe to or process UI accessibility events.
     }
 
     @Override
@@ -182,12 +194,13 @@ public final class MouseAccessibilityService extends AccessibilityService {
     public void externalPulse(MouseAction action) {
         main.post(() -> {
             if (action == MouseAction.TRIGGER) {
-                triggerShort();
+                triggerShortPulse();
             } else if (action == MouseAction.CURSOR_NEXT) {
                 cycleCursor();
             } else if (action.movement) {
                 if (pointer != null && pointer.isVisible()) {
-                    moveForActions(EnumSet.of(action), movementSpeed);
+                    if (pointer.mode() == MouseMode.SCROLL) scrollForActions(EnumSet.of(action));
+                    else moveForActions(EnumSet.of(action), movementSpeed);
                 }
             } else if (action == MouseAction.LEFT_BUTTON) {
                 actionDown(action);
@@ -197,23 +210,27 @@ public final class MouseAccessibilityService extends AccessibilityService {
     }
 
     public void externalTriggerShort() {
-        main.post(this::triggerShort);
+        main.post(this::triggerShortPulse);
     }
 
     public void externalTriggerLong() {
-        main.post(this::toggleMouseVisibility);
+        main.post(() -> {
+            cancelTriggerTapState();
+            toggleMouseVisibility();
+        });
     }
 
     public void externalMouseToggle() {
-        main.post(this::toggleMouseVisibility);
+        main.post(() -> {
+            cancelTriggerTapState();
+            toggleMouseVisibility();
+        });
     }
 
     public void externalModeToggle() {
         main.post(() -> {
-            if (pointer == null || !pointer.isVisible()) return;
-            lastTriggerShortUptime = 0L;
-            pointer.toggleScrollMode();
-            showToast(pointer.isScrollMode() ? "Mouse mode: Scroll" : "Mouse mode: Normal");
+            cancelTriggerTapState();
+            selectNextNormalHoldMode();
         });
     }
 
@@ -277,6 +294,8 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (triggerHeld) return;
             triggerHeld = true;
             triggerLongFired = false;
+            triggerSecondTapCandidate = triggerSinglePending;
+            if (triggerSecondTapCandidate) cancelPendingSinglePress();
             main.postDelayed(triggerLongPress, ViewConfiguration.getLongPressTimeout());
             return;
         }
@@ -298,7 +317,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
             if (!triggerHeld) return;
             triggerHeld = false;
             main.removeCallbacks(triggerLongPress);
-            if (!triggerLongFired) triggerShort();
+            if (!triggerLongFired) finishHardwareTriggerShortPress();
             triggerLongFired = false;
             return;
         }
@@ -310,26 +329,66 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (action == MouseAction.LEFT_BUTTON) pointer.leftUp();
     }
 
-    private void triggerShort() {
+    private void finishHardwareTriggerShortPress() {
         if (pointer == null || !pointer.isVisible()) {
-            lastTriggerShortUptime = 0L;
+            triggerSecondTapCandidate = false;
+            cancelPendingSinglePress();
             return;
         }
 
-        // Apply Normal immediately on the first short press. A second short press inside the
-        // platform double-tap window upgrades the selection to Scroll without delaying the first.
-        long now = SystemClock.uptimeMillis();
-        boolean doublePress = lastTriggerShortUptime > 0L
-                && now - lastTriggerShortUptime <= ViewConfiguration.getDoubleTapTimeout();
-        lastTriggerShortUptime = doublePress ? 0L : now;
+        if (triggerSecondTapCandidate) {
+            triggerSecondTapCandidate = false;
+            selectScrollMode();
+        } else {
+            scheduleSinglePress();
+        }
+    }
 
-        pointer.setScrollMode(doublePress);
-        showToast(doublePress ? "Mouse mode: Scroll" : "Mouse mode: Normal");
+    private void triggerShortPulse() {
+        if (pointer == null || !pointer.isVisible()) {
+            cancelTriggerTapState();
+            return;
+        }
+        if (triggerSinglePending) {
+            cancelPendingSinglePress();
+            selectScrollMode();
+        } else {
+            scheduleSinglePress();
+        }
+    }
+
+    private void scheduleSinglePress() {
+        cancelPendingSinglePress();
+        triggerSinglePending = true;
+        main.postDelayed(triggerSinglePress, ViewConfiguration.getDoubleTapTimeout());
+    }
+
+    private void cancelPendingSinglePress() {
+        if (!triggerSinglePending) return;
+        triggerSinglePending = false;
+        main.removeCallbacks(triggerSinglePress);
+    }
+
+    private void cancelTriggerTapState() {
+        triggerSecondTapCandidate = false;
+        cancelPendingSinglePress();
+    }
+
+    private void selectNextNormalHoldMode() {
+        if (pointer == null || !pointer.isVisible()) return;
+        pointer.toggleNormalHoldMode();
+        showToast(pointer.mode() == MouseMode.HOLD ? "Mouse mode: Hold" : "Mouse mode: Normal");
+    }
+
+    private void selectScrollMode() {
+        if (pointer == null || !pointer.isVisible()) return;
+        pointer.setMode(MouseMode.SCROLL);
+        showToast("Mouse mode: Scroll");
     }
 
     private void toggleMouseVisibility() {
         if (pointer == null) return;
-        lastTriggerShortUptime = 0L;
+        cancelTriggerTapState();
         if (pointer.isVisible()) {
             pressed.clear();
             stopTicker();
@@ -367,12 +426,27 @@ public final class MouseAccessibilityService extends AccessibilityService {
                 stopTicker();
                 return;
             }
-            moveForActions(pressed, movementSpeed);
-            main.postDelayed(this, TICK_MS);
+            if (pointer.mode() == MouseMode.SCROLL) {
+                scrollForActions(pressed);
+                main.postDelayed(this, SCROLL_REPEAT_MS);
+            } else {
+                moveForActions(pressed, movementSpeed);
+                main.postDelayed(this, TICK_MS);
+            }
         }
     };
 
     private void moveForActions(Iterable<MouseAction> actions, float speed) {
+        if (pointer == null || !resolveDirection(actions, resolvedDirection)) return;
+        pointer.move(resolvedDirection[0] * speed, resolvedDirection[1] * speed);
+    }
+
+    private void scrollForActions(Iterable<MouseAction> actions) {
+        if (pointer == null || !resolveDirection(actions, resolvedDirection)) return;
+        pointer.scroll(resolvedDirection[0], resolvedDirection[1]);
+    }
+
+    private boolean resolveDirection(Iterable<MouseAction> actions, float[] out) {
         float vx = 0f;
         float vy = 0f;
         for (MouseAction action : actions) {
@@ -384,7 +458,6 @@ public final class MouseAccessibilityService extends AccessibilityService {
             vx += action.dx * actionScale;
             vy += action.dy * actionScale;
         }
-        if (pointer == null) return;
 
         if (!blendDirections) {
             vx = Math.signum(vx);
@@ -392,7 +465,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         }
 
         float length = (float) Math.sqrt(vx * vx + vy * vy);
-        if (length < 0.0001f) return;
+        if (length < 0.0001f) return false;
         vx /= length;
         vy /= length;
 
@@ -414,7 +487,9 @@ public final class MouseAccessibilityService extends AccessibilityService {
         if (invertX) vx = -vx;
         if (invertY) vy = -vy;
 
-        pointer.move(vx * speed, vy * speed);
+        out[0] = vx;
+        out[1] = vy;
+        return true;
     }
 
     private void reloadDirectionPreferences() {
@@ -439,7 +514,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
         stopTicker();
         triggerHeld = false;
         triggerLongFired = false;
-        lastTriggerShortUptime = 0L;
+        cancelTriggerTapState();
         main.removeCallbacks(triggerLongPress);
     }
 

@@ -4,17 +4,21 @@ import android.accessibilityservice.AccessibilityService;
 
 import ru.vasys.keycursor.core.CursorColor;
 import ru.vasys.keycursor.core.CursorStyle;
+import ru.vasys.keycursor.core.MouseMode;
 
 public final class PointerController {
     private final CursorOverlay overlay;
     private final ContinuousTouchController touch;
+    private final AccessibilityScrollController scroller;
 
     private boolean leftHeld;
-    private boolean scrollMode;
+    private MouseMode mode = MouseMode.NORMAL;
 
-    public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges, CursorColor cursorColor, int cursorSizeDp) {
+    public PointerController(AccessibilityService service, CursorStyle cursorStyle, boolean wrapEdges,
+                             CursorColor cursorColor, int cursorSizeDp) {
         overlay = new CursorOverlay(service, cursorStyle, wrapEdges, cursorColor, cursorSizeDp);
         touch = new ContinuousTouchController(service);
+        scroller = new AccessibilityScrollController(service);
     }
 
     public void destroy() {
@@ -23,12 +27,17 @@ public final class PointerController {
     }
 
     public void move(float dx, float dy) {
-        if (!overlay.isVisible()) return;
+        if (!overlay.isVisible() || mode == MouseMode.SCROLL) return;
         boolean needsRebase = overlay.moveBy(dx, dy);
-        if (leftHeld || scrollMode) {
+        if (leftHeld || mode == MouseMode.HOLD) {
             if (needsRebase) touch.rebase(overlay.screenX(), overlay.screenY());
             else touch.moveTo(overlay.screenX(), overlay.screenY());
         }
+    }
+
+    public boolean scroll(float dx, float dy) {
+        if (!overlay.isVisible() || mode != MouseMode.SCROLL) return false;
+        return scroller.scrollAt(overlay.screenX(), overlay.screenY(), dx, dy);
     }
 
     public void leftDown() {
@@ -43,29 +52,29 @@ public final class PointerController {
         syncTouchState();
     }
 
-    public void setScrollMode(boolean enabled) {
-        if (!overlay.isVisible() || scrollMode == enabled) return;
-        scrollMode = enabled;
-        overlay.setScrollMode(scrollMode);
+    public void setMode(MouseMode next) {
+        if (!overlay.isVisible() || next == null || mode == next) return;
+        mode = next;
+        overlay.setMouseMode(mode);
         syncTouchState();
     }
 
-    public void toggleScrollMode() {
-        setScrollMode(!scrollMode);
+    public void toggleNormalHoldMode() {
+        setMode(mode == MouseMode.NORMAL ? MouseMode.HOLD : MouseMode.NORMAL);
     }
 
     public void show() {
         if (overlay.isVisible()) return;
-        scrollMode = false;
+        mode = MouseMode.NORMAL;
         leftHeld = false;
-        overlay.setScrollMode(false);
+        overlay.setMouseMode(mode);
         overlay.setVisible(true);
     }
 
     public void hide() {
         leftHeld = false;
-        scrollMode = false;
-        overlay.setScrollMode(false);
+        mode = MouseMode.NORMAL;
+        overlay.setMouseMode(mode);
         if (touch.isRequestedDown()) touch.release();
         overlay.setVisible(false);
     }
@@ -76,6 +85,10 @@ public final class PointerController {
 
     public boolean isVisible() {
         return overlay.isVisible();
+    }
+
+    public MouseMode mode() {
+        return mode;
     }
 
     public void setCursorStyle(CursorStyle style) {
@@ -98,12 +111,8 @@ public final class PointerController {
         overlay.refreshDisplayBounds();
     }
 
-    public boolean isScrollMode() {
-        return scrollMode;
-    }
-
     private void syncTouchState() {
-        boolean shouldHold = overlay.isVisible() && (leftHeld || scrollMode);
+        boolean shouldHold = overlay.isVisible() && (leftHeld || mode == MouseMode.HOLD);
         if (shouldHold && !touch.isRequestedDown()) {
             touch.press(overlay.screenX(), overlay.screenY());
         } else if (!shouldHold && touch.isRequestedDown()) {

@@ -10,6 +10,7 @@ import android.widget.FrameLayout;
 
 import ru.vasys.keycursor.core.CursorColor;
 import ru.vasys.keycursor.core.CursorStyle;
+import ru.vasys.keycursor.core.MouseMode;
 import ru.vasys.keycursor.view.CursorGlyphView;
 
 /**
@@ -178,8 +179,12 @@ public final class CursorOverlay {
         applyCursorPosition();
     }
 
-    public void setScrollMode(boolean scrollMode) {
-        cursor.setCursorAlpha(scrollMode ? 0.80f : 1.0f);
+    public void setMouseMode(MouseMode mode) {
+        float alpha;
+        if (mode == MouseMode.HOLD) alpha = 0.80f;
+        else if (mode == MouseMode.SCROLL) alpha = 0.65f;
+        else alpha = 1.0f;
+        cursor.setCursorAlpha(alpha);
     }
 
     private void addOverlayWindow() {

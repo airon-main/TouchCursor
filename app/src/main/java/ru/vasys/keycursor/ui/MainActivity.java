@@ -355,7 +355,7 @@ public final class MainActivity extends Activity {
     private View buildBindingsCard() {
         LinearLayout card = card(
                 "Bindings",
-                "Hold Mouse key to show or hide the cursor. Single press selects Normal; double press selects Scroll.");
+                "Hold Mouse key to show or hide the cursor. Single press toggles Normal / Hold; double press selects Scroll.");
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);

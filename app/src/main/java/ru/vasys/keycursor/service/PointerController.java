@@ -41,6 +41,10 @@ public final class PointerController {
         return scroller.scrollAt(overlay.screenX(), overlay.screenY(), dx, dy);
     }
 
+    public void setStrokeListener(ContinuousTouchController.StrokeListener listener) {
+        touch.setStrokeListener(listener);
+    }
+
     public void leftDown() {
         if (!overlay.isVisible() || leftHeld) return;
         leftHeld = true;

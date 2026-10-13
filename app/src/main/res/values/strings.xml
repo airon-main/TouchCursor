@@ -2,4 +2,5 @@
     <string name="app_name">KeyCursor</string>
     <string name="service_name">KeyCursor input service</string>
     <string name="service_description">Hardware-key driven mouse and touch cursor.</string>
+    <string name="tile_label">Touchpad</string>
 </resources>

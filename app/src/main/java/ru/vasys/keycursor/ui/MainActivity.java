@@ -31,8 +31,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 
 import ru.vasys.keycursor.R;
 import ru.vasys.keycursor.core.Binding;
@@ -40,6 +44,8 @@ import ru.vasys.keycursor.core.BindingState;
 import ru.vasys.keycursor.core.CursorColor;
 import ru.vasys.keycursor.core.CursorStyle;
 import ru.vasys.keycursor.core.MouseAction;
+import ru.vasys.keycursor.core.PadAction;
+import ru.vasys.keycursor.core.SwipeDirection;
 import ru.vasys.keycursor.input.ExternalTriggerReceiver;
 import ru.vasys.keycursor.service.MouseAccessibilityService;
 import ru.vasys.keycursor.view.CursorGlyphView;
@@ -74,6 +80,13 @@ public final class MainActivity extends Activity {
     private boolean refreshingCursorColor;
     private boolean cursorSizeTracking;
     private int pendingCursorSizeDp;
+    private Button padAreaButton;
+    private Switch padAccelerationCheck;
+    private Switch padTapAndDragCheck;
+    private boolean refreshingPad;
+    private final List<PadSeek> padSeeks = new ArrayList<>();
+    private final Map<Integer, Map<SwipeDirection, Spinner>> padSwipeSpinners = new java.util.TreeMap<>();
+    private final List<PadAction> padActionChoices = new ArrayList<>();
 
     private final Map<MouseAction, ImageButton> bindingButtons = new EnumMap<>(MouseAction.class);
     private final Map<CursorStyle, CheckBox> cursorChecks = new EnumMap<>(CursorStyle.class);
@@ -144,12 +157,13 @@ public final class MainActivity extends Activity {
         title.setPadding(dp(2), 0, 0, 0);
         root.addView(title);
 
-        TextView subtitle = sectionDescription("Keyboard controls, real touch gestures.");
+        TextView subtitle = sectionDescription("Keyboard and touchpad controls, real touch gestures.");
         subtitle.setTextSize(13);
         subtitle.setPadding(dp(2), 0, 0, dp(8));
         root.addView(subtitle);
 
         root.addView(buildAccessibilityCard());
+        root.addView(buildTouchpadCard());
         root.addView(buildPointerCard());
         root.addView(buildBindingsCard());
         root.addView(buildDirectionCard());
@@ -295,6 +309,224 @@ public final class MainActivity extends Activity {
             }
         });
         return spinner;
+    }
+
+    private View buildTouchpadCard() {
+        LinearLayout card = card(
+                "Touchpad",
+                "Use the screen, or part of it, as a touchpad. Show or hide it with the Touchpad tile in "
+                        + "Quick Settings. One finger moves, a tap clicks, tap then hold and drag to scroll or "
+                        + "drag, and two or three fingers swipe to run actions.");
+
+        Button toggle = button("Show / hide touchpad now");
+        toggle.setOnClickListener(v -> {
+            MouseAccessibilityService service = MouseAccessibilityService.getRunningInstance();
+            if (service == null) {
+                showToast("Enable the KeyCursor input service first");
+                return;
+            }
+            service.externalPadToggle();
+        });
+        card.addView(toggle);
+
+        padAreaButton = button("");
+        LinearLayout.LayoutParams areaParams = new LinearLayout.LayoutParams(-1, -2);
+        areaParams.topMargin = dp(8);
+        padAreaButton.setLayoutParams(areaParams);
+        padAreaButton.setOnClickListener(v -> {
+            settings.setPadFullScreen(!settings.padFullScreen());
+            // The opacity range depends on the area, so every slider is re-read.
+            refreshTouchpad();
+            notifyService();
+        });
+        card.addView(padAreaButton);
+        card.addView(sectionDescription(
+                "Pad mode: drag the bar at the top to move the pad and the corner grip to resize it."));
+
+        Button resetPad = button("Reset pad position and size");
+        resetPad.setOnClickListener(v -> {
+            settings.resetPadRect();
+            notifyService();
+            showToast("Pad position reset");
+        });
+        card.addView(resetPad);
+
+        card.addView(subheading("Pointer"));
+        padSeeks.clear();
+        addPadSeek(card, "Sensitivity", "%",
+                () -> ru.vasys.keycursor.core.Settings.MIN_PAD_SENSITIVITY,
+                ru.vasys.keycursor.core.Settings.MAX_PAD_SENSITIVITY,
+                settings::padSensitivityPercent, settings::setPadSensitivityPercent);
+        padAccelerationCheck = optionSwitch("Pointer acceleration");
+        padAccelerationCheck.setOnCheckedChangeListener((b, checked) -> {
+            if (refreshingPad || settings.padAcceleration() == checked) return;
+            settings.setPadAcceleration(checked);
+            notifyService();
+        });
+        card.addView(padAccelerationCheck);
+        addPadSeek(card, "Pad opacity", "%",
+                settings::padOpacityMinPercent,
+                ru.vasys.keycursor.core.Settings.MAX_PAD_OPACITY,
+                settings::padOpacityPercent, settings::setPadOpacityPercent);
+        card.addView(sectionDescription(
+                "The movable pad stays at least 5% visible so you can always find it. "
+                        + "The full-screen pad can go down to 0% (invisible)."));
+
+        card.addView(subheading("Tap, hold and drag"));
+        padTapAndDragCheck = optionSwitch("Tap, then hold to drag / scroll");
+        padTapAndDragCheck.setOnCheckedChangeListener((b, checked) -> {
+            if (refreshingPad || settings.padTapAndDrag() == checked) return;
+            settings.setPadTapAndDrag(checked);
+            notifyService();
+        });
+        card.addView(padTapAndDragCheck);
+        addPadSeek(card, "Tap delay", " ms",
+                () -> ru.vasys.keycursor.core.Settings.MIN_PAD_TAP_DELAY_MS,
+                ru.vasys.keycursor.core.Settings.MAX_PAD_TAP_DELAY_MS,
+                settings::padTapDelayMs, settings::setPadTapDelayMs);
+        card.addView(sectionDescription(
+                "Every tap waits this long before it clicks. Touch again inside that time and hold "
+                        + "or drag, and the first tap is ignored. That second touch is a real drag, so "
+                        + "it scrolls lists. 0 = click instantly (tap-then-hold is unavailable)."));
+
+        padActionChoices.clear();
+        for (PadAction action : PadAction.values()) {
+            if (action.isAvailable()) padActionChoices.add(action);
+        }
+        addSwipeSection(card, 2, "Two-finger swipe");
+        addSwipeSection(card, 3, "Three-finger swipe");
+        return card;
+    }
+
+    private void addSwipeSection(LinearLayout card, int fingers, String title) {
+        card.addView(subheading(title));
+        card.addView(sectionDescription("Choose what each swipe direction does."));
+        String[] labels = new String[padActionChoices.size()];
+        for (int i = 0; i < labels.length; i++) labels[i] = padActionChoices.get(i).label;
+        Map<SwipeDirection, Spinner> spinners = new EnumMap<>(SwipeDirection.class);
+        padSwipeSpinners.put(fingers, spinners);
+        for (SwipeDirection direction : SwipeDirection.values()) {
+            card.addView(settingLabel(direction.label));
+            Spinner spinner = new Spinner(this);
+            ArrayAdapter<String> adapter =
+                    new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            spinner.setAdapter(adapter);
+            spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    if (refreshingPad || position < 0 || position >= padActionChoices.size()) return;
+                    PadAction selected = padActionChoices.get(position);
+                    if (selected == settings.padSwipeAction(fingers, direction)) return;
+                    settings.setPadSwipeAction(fingers, direction, selected);
+                    notifyService();
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+                }
+            });
+            spinners.put(direction, spinner);
+            card.addView(spinner, new LinearLayout.LayoutParams(-1, -2));
+        }
+    }
+
+    private void addPadSeek(LinearLayout card, String title, String unit, IntSupplier minGetter,
+                            int max, IntSupplier getter, IntConsumer setter) {
+        PadSeek seek = new PadSeek(title, unit, minGetter, max, getter, setter);
+        padSeeks.add(seek);
+        card.addView(seek.label);
+        card.addView(seek.seek);
+    }
+
+    /**
+     * A labelled SeekBar bound to one integer touchpad setting; applied when the finger lifts.
+     * The minimum can change at runtime (opacity depends on the pad area), so it is re-read, and the
+     * bar re-ranged, on every refresh.
+     */
+    private final class PadSeek {
+        final String title;
+        final String unit;
+        final int max;
+        final IntSupplier minGetter;
+        final IntSupplier getter;
+        final IntConsumer setter;
+        final TextView label;
+        final SeekBar seek;
+        int min;
+        boolean tracking;
+
+        PadSeek(String title, String unit, IntSupplier minGetter, int max,
+                IntSupplier getter, IntConsumer setter) {
+            this.title = title;
+            this.unit = unit;
+            this.minGetter = minGetter;
+            this.max = max;
+            this.getter = getter;
+            this.setter = setter;
+            label = settingLabel("");
+            seek = new SeekBar(MainActivity.this);
+            seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (!fromUser) return;
+                    updateLabel(PadSeek.this.min + progress);
+                    if (!tracking) commit();
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    tracking = true;
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    tracking = false;
+                    commit();
+                }
+            });
+            refresh();
+        }
+
+        void commit() {
+            PadSeek.this.setter.accept(min + seek.getProgress());
+            notifyService();
+        }
+
+        void updateLabel(int value) {
+            label.setText(title + " \u00b7 " + value + unit);
+        }
+
+        void refresh() {
+            min = minGetter.getAsInt();
+            seek.setMax(max - min);
+            int value = getter.getAsInt();
+            updateLabel(value);
+            seek.setProgress(value - min);
+        }
+    }
+
+    private void refreshTouchpad() {
+        refreshingPad = true;
+        try {
+            if (padAreaButton != null) {
+                padAreaButton.setText(settings.padFullScreen()
+                        ? "Touchpad area: Full screen (tap to switch)"
+                        : "Touchpad area: Movable pad (tap to switch)");
+            }
+            if (padAccelerationCheck != null) padAccelerationCheck.setChecked(settings.padAcceleration());
+            if (padTapAndDragCheck != null) padTapAndDragCheck.setChecked(settings.padTapAndDrag());
+            for (PadSeek seek : padSeeks) seek.refresh();
+            for (Map.Entry<Integer, Map<SwipeDirection, Spinner>> group : padSwipeSpinners.entrySet()) {
+                for (Map.Entry<SwipeDirection, Spinner> entry : group.getValue().entrySet()) {
+                    PadAction current = settings.padSwipeAction(group.getKey(), entry.getKey());
+                    int position = Math.max(0, padActionChoices.indexOf(current));
+                    entry.getValue().setSelection(position, false);
+                }
+            }
+        } finally {
+            refreshingPad = false;
+        }
     }
 
     private View buildDirectionCard() {
@@ -560,6 +792,7 @@ public final class MainActivity extends Activity {
         refreshCursorSize();
         refreshCursorPreviews();
         refreshDirectionBehavior();
+        refreshTouchpad();
     }
 
     private void refreshDirectionBehavior() {

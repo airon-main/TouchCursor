@@ -2,6 +2,7 @@ package ru.vasys.keycursor.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
@@ -20,7 +21,10 @@ import ru.vasys.keycursor.core.CursorStyle;
 import ru.vasys.keycursor.core.DpadKeyNormalizer;
 import ru.vasys.keycursor.core.MouseAction;
 import ru.vasys.keycursor.core.MouseMode;
+import ru.vasys.keycursor.core.PadAction;
+import ru.vasys.keycursor.core.PadGestureEngine;
 import ru.vasys.keycursor.core.Settings;
+import ru.vasys.keycursor.core.SwipeDirection;
 
 /**
  * Accessibility is used as the gesture backend and hardware-key router.
@@ -33,6 +37,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
     private static volatile MouseAccessibilityService runningInstance;
     private static final long TICK_MS = 16;
     private static final long SCROLL_REPEAT_MS = 160;
+    private static final long PASS_THROUGH_SETTLE_MS = 40;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EnumSet<MouseAction> pressed = EnumSet.noneOf(MouseAction.class);
@@ -41,6 +46,7 @@ public final class MouseAccessibilityService extends AccessibilityService {
 
     private Settings settings;
     private PointerController pointer;
+    private TouchpadOverlay pad;
     private Map<MouseAction, Binding> bindings;
     private boolean tickerRunning;
     private boolean calibrationMode;
@@ -94,6 +100,25 @@ public final class MouseAccessibilityService extends AccessibilityService {
         reloadDirectionPreferences();
         captureMouseKeyVisible = settings.captureMouseKeyVisible();
         refreshDisplayRotation();
+
+        pad = new TouchpadOverlay(this, settings, padListener);
+        pointer.setStrokeListener(new ContinuousTouchController.StrokeListener() {
+            @Override
+            public long onStrokeBegin(float x, float y) {
+                if (pad == null) return 0L;
+                // Only step aside when the injected touch lands on the pad itself. A window flag
+                // change is applied on the next layout pass, so delay the touch until it has.
+                boolean inside = pad.containsScreenPoint(x, y);
+                boolean changed = pad.setPassThrough(inside);
+                return changed && inside ? PASS_THROUGH_SETTLE_MS : 0L;
+            }
+
+            @Override
+            public void onStrokeEnd() {
+                if (pad != null) pad.setPassThrough(false);
+            }
+        });
+        PadTileService.requestRefresh(this);
     }
 
     @Override
@@ -107,20 +132,26 @@ public final class MouseAccessibilityService extends AccessibilityService {
         super.onConfigurationChanged(newConfig);
         refreshDisplayRotation();
         if (pointer != null) pointer.refreshDisplayBounds();
+        if (pad != null) pad.refreshDisplayBounds();
     }
 
     @Override
     public void onInterrupt() {
         resetInputState();
+        if (pad != null) pad.hide();
         if (pointer != null) pointer.hide();
+        PadTileService.requestRefresh(this);
     }
 
     @Override
     public void onDestroy() {
         runningInstance = null;
         resetInputState();
+        if (pad != null) pad.destroy();
+        pad = null;
         if (pointer != null) pointer.destroy();
         pointer = null;
+        PadTileService.requestRefresh(this);
         if (feedbackToast != null) feedbackToast.cancel();
         feedbackToast = null;
         super.onDestroy();
@@ -281,7 +312,126 @@ public final class MouseAccessibilityService extends AccessibilityService {
                 pointer.setCursorColor(settings.cursorColor());
                 pointer.setCursorSizeDp(settings.cursorSizeDp());
             }
+            if (pad != null) pad.applySettings();
         });
+    }
+
+    // ---- touchpad ----
+
+    private final PadGestureEngine.Listener padListener = new PadGestureEngine.Listener() {
+        @Override
+        public void onMove(float dx, float dy) {
+            if (pointer != null && pointer.isVisible()) pointer.move(dx, dy);
+        }
+
+        @Override
+        public void onClick() {
+            if (pointer == null || !pointer.isVisible()) return;
+            pointer.leftDown();
+            pointer.leftUp();
+        }
+
+        @Override
+        public void onDragStart() {
+            if (pointer != null && pointer.isVisible()) pointer.leftDown();
+        }
+
+        @Override
+        public void onDragEnd() {
+            if (pointer != null) pointer.leftUp();
+        }
+
+        @Override
+        public void onSwipe(int fingers, SwipeDirection direction) {
+            if (settings != null) performPadAction(settings.padSwipeAction(fingers, direction));
+        }
+    };
+
+    public boolean isPadVisible() {
+        return pad != null && pad.isShown();
+    }
+
+    /** Shows or hides the touchpad together with the cursor. */
+    public void setPadVisible(boolean visible) {
+        if (pad == null || pointer == null) return;
+        if (visible == pad.isShown()) return;
+        cancelTriggerTapState();
+        if (visible) {
+            if (!pointer.isVisible()) pointer.show();
+            pad.show();
+            if (!pad.isShown()) {
+                // The overlay window could not be added; do not leave a lone cursor behind.
+                pointer.hide();
+                showToast("Touchpad unavailable");
+            }
+        } else {
+            pad.hide();
+            pressed.clear();
+            stopTicker();
+            if (pointer.isVisible()) pointer.hide();
+        }
+        PadTileService.requestRefresh(this);
+    }
+
+    /** Quick Settings tile entry point: toggles the pad and closes the shade when turning it on. */
+    public void togglePadFromTile() {
+        main.post(() -> {
+            boolean turnOn = !isPadVisible();
+            setPadVisible(turnOn);
+            if (turnOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE);
+            }
+        });
+    }
+
+    public void externalPadToggle() {
+        main.post(() -> setPadVisible(!isPadVisible()));
+    }
+
+    private void performPadAction(PadAction action) {
+        if (action == null) return;
+        switch (action) {
+            case BACK:
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                break;
+            case HOME:
+                performGlobalAction(GLOBAL_ACTION_HOME);
+                break;
+            case RECENTS:
+                performGlobalAction(GLOBAL_ACTION_RECENTS);
+                break;
+            case NOTIFICATIONS:
+                performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
+                break;
+            case QUICK_SETTINGS:
+                performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
+                break;
+            case POWER_DIALOG:
+                performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
+                break;
+            case LOCK_SCREEN:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+                }
+                break;
+            case SCREENSHOT:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT);
+                }
+                break;
+            case TOGGLE_HOLD:
+                selectNextNormalHoldMode();
+                break;
+            case NEXT_CURSOR:
+                cycleCursor();
+                break;
+            case HIDE_PAD:
+                setPadVisible(false);
+                break;
+            case NONE:
+            default:
+                break;
+        }
     }
 
     private MouseAction findAction(KeyEvent event) {
@@ -418,6 +568,11 @@ public final class MouseAccessibilityService extends AccessibilityService {
             stopTicker();
         }
         pointer.toggleVisibility();
+        if (!pointer.isVisible() && pad != null && pad.isShown()) {
+            // A hidden cursor with a live pad would be a dead surface that eats touches.
+            pad.hide();
+            PadTileService.requestRefresh(this);
+        }
         showToast(pointer.isVisible() ? "Mouse: on · Normal" : "Mouse: off");
     }
 

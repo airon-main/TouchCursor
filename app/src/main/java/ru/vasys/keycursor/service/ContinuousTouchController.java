@@ -12,7 +12,22 @@ import android.os.Looper;
  * does not become a sequence of independent swipes.
  */
 public final class ContinuousTouchController {
+    /**
+     * Notified when a virtual finger goes down / is fully released, so the touchpad window can
+     * stop intercepting touches while the injected stroke targets a point beneath it.
+     */
+    public interface StrokeListener {
+        /**
+         * A virtual finger is about to go down at (x, y). Returns how many milliseconds the first
+         * injected touch should wait (0 for none), e.g. for a window flag change to take effect.
+         */
+        long onStrokeBegin(float x, float y);
+
+        void onStrokeEnd();
+    }
+
     private final AccessibilityService service;
+    private StrokeListener strokeListener;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private GestureDescription.StrokeDescription stroke;
@@ -28,6 +43,21 @@ public final class ContinuousTouchController {
 
     public ContinuousTouchController(AccessibilityService service) {
         this.service = service;
+    }
+
+    public void setStrokeListener(StrokeListener listener) {
+        strokeListener = listener;
+    }
+
+    private long notifyBegin(float x, float y) {
+        return strokeListener == null ? 0L : Math.max(0L, strokeListener.onStrokeBegin(x, y));
+    }
+
+    /** Reports the end of the stroke only once nothing is pending or in flight. */
+    private void notifyEndIfIdle() {
+        if (strokeListener != null && !requestedDown && !busy && stroke == null) {
+            strokeListener.onStrokeEnd();
+        }
     }
 
     public void press(float x, float y) {
@@ -58,6 +88,7 @@ public final class ContinuousTouchController {
             requestedDown = false;
             restartAfterRelease = false;
             if (!busy && stroke != null) dispatchRelease();
+            else notifyEndIfIdle();
         });
     }
 
@@ -96,7 +127,14 @@ public final class ContinuousTouchController {
         currentY = y;
         dispatchedEndX = x;
         dispatchedEndY = y;
-        dispatch(next, true);
+        long settleMs = notifyBegin(x, y);
+        if (settleMs > 0) {
+            // Hold the controller busy so moves/releases queue up behind the first touch.
+            busy = true;
+            main.postDelayed(() -> dispatch(next, true), settleMs);
+        } else {
+            dispatch(next, true);
+        }
     }
 
     private void dispatchMove() {
@@ -140,6 +178,8 @@ public final class ContinuousTouchController {
                             if (requestedDown && restartAfterRelease) {
                                 restartAfterRelease = false;
                                 dispatchStart(targetX, targetY);
+                            } else {
+                                notifyEndIfIdle();
                             }
                             return;
                         }
@@ -160,12 +200,14 @@ public final class ContinuousTouchController {
                         busy = false;
                         stroke = null;
                         restartAfterRelease = false;
+                        notifyEndIfIdle();
                     }
                 }, main);
         if (!accepted) {
             busy = false;
             stroke = null;
             restartAfterRelease = false;
+            notifyEndIfIdle();
         }
     }
 

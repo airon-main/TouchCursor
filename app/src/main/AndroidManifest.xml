@@ -31,6 +31,17 @@
                 android:resource="@xml/accessibility_service" />
         </service>
 
+        <service
+            android:name=".service.PadTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_touchpad"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".input.ExternalTriggerReceiver"
             android:enabled="false"
@@ -41,6 +52,7 @@
                 <action android:name="ru.vasys.keycursor.input.PULSE" />
                 <action android:name="ru.vasys.keycursor.action.MOUSE_TOGGLE" />
                 <action android:name="ru.vasys.keycursor.action.MODE_TOGGLE" />
+                <action android:name="ru.vasys.keycursor.action.PAD_TOGGLE" />
                 <action android:name="ru.vasys.keycursor.action.MOUSE_KEY_SHORT" />
                 <action android:name="ru.vasys.keycursor.action.MOUSE_KEY_LONG" />
                 <action android:name="ru.vasys.keycursor.action.MOUSE_KEY_DOWN" />

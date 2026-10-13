@@ -16,6 +16,28 @@ The Accessibility service filters hardware keys, draws the overlay and performs 
 
 The cursor overlay exists only while mouse mode is visible. Cursor position is local to the actual laid-out overlay viewport; touch gestures use that viewport's screen origin plus the same pointer coordinate.
 
+## Touchpad
+
+```text
+touch on pad window
+        ↓
+   TouchpadView  ──►  PadGestureEngine (pure Java, no Android types)
+                              ↓ listener
+                   MouseAccessibilityService
+              ┌───────────┼─────────────┐
+        PointerController   scrollDirect   performGlobalAction / mode changes
+```
+
+`TouchpadOverlay` owns an accessibility-overlay window (full screen or a rectangle stored as screen fractions) that, unlike the cursor overlay, receives touches. `TouchpadView` converts MotionEvents to engine calls and supplies a one-shot `Handler` timer; `PadGestureEngine` recognizes one-finger movement, tap, tap-then-hold drag and two- and three-finger swipes and reports them through a listener, so it can be unit-tested on a plain JVM with a fake timer.
+
+A tap does not click on release. It waits `tapDelayMs`; a second touch inside that window parks the engine in an undecided state, and only then is the outcome chosen: movement past the touch slop or a hold longer than the tap timeout starts a drag (the first tap is discarded), a quick release is a double tap (two clicks, spaced so they are two separate touches), and extra fingers make it a swipe (first tap discarded). The drag is an ordinary held virtual finger, so scrolling comes from the app's own touch handling rather than from Accessibility scroll actions. Two- and three-finger swipes share one implementation: one event per touch once the centroid travels past a threshold, mapped to a configurable `PadAction` per finger count and direction.
+
+Because injected gestures are hit-tested like real touches, a touchable pad above the cursor would swallow KeyCursor's own clicks. `ContinuousTouchController` therefore reports stroke begin/end to the service, which switches the pad window to `FLAG_NOT_TOUCHABLE` for the duration of an injected stroke whose target lies on the pad, and delays the first injected touch by a short settle time so the flag change takes effect first. With the pad hidden, or the cursor outside a rectangular pad, nothing changes.
+
+Once more than one finger has touched, a gesture never falls back to cursor movement when fingers lift; it stays inert until all fingers are up. A touch cancel during tap-and-drag releases the held virtual finger.
+
+Hiding the cursor (long-press of the Mouse key) also hides the pad, so a dead pad can never sit over the screen.
+
 ## Mouse modes
 
 - **Normal** — movement only; the click binding produces real touch DOWN / MOVE / UP and can be held for drag.

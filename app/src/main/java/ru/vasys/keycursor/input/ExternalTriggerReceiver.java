@@ -34,6 +34,7 @@ public final class ExternalTriggerReceiver extends BroadcastReceiver {
 
         if ((PREFIX + "action.MOUSE_TOGGLE").equals(action)) { service.externalMouseToggle(); return; }
         if ((PREFIX + "action.MODE_TOGGLE").equals(action)) { service.externalModeToggle(); return; }
+        if ((PREFIX + "action.PAD_TOGGLE").equals(action)) { service.externalPadToggle(); return; }
         if ((PREFIX + "action.MOUSE_KEY_SHORT").equals(action)) { service.externalTriggerShort(); return; }
         if ((PREFIX + "action.MOUSE_KEY_LONG").equals(action)) { service.externalTriggerLong(); return; }
         if ((PREFIX + "action.MOUSE_KEY_DOWN").equals(action)) { service.externalDown(MouseAction.TRIGGER); return; }

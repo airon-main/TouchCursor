@@ -28,7 +28,28 @@ public final class Settings {
     private static final String INVERT_Y_LANDSCAPE = "invert_y_landscape";
     private static final String BLEND_DIRECTIONS = "blend_directions";
     private static final String CAPTURE_MOUSE_KEY_VISIBLE = "capture_mouse_key_visible";
+    private static final String PAD_FULL_SCREEN = "pad_full_screen";
+    private static final String PAD_LEFT = "pad_left_f";
+    private static final String PAD_TOP = "pad_top_f";
+    private static final String PAD_WIDTH = "pad_width_f";
+    private static final String PAD_HEIGHT = "pad_height_f";
+    private static final String PAD_SENSITIVITY = "pad_sensitivity_pct";
+    private static final String PAD_ACCELERATION = "pad_acceleration";
+    private static final String PAD_TAP_AND_DRAG = "pad_tap_and_drag";
+    private static final String PAD_TAP_DELAY = "pad_tap_delay_ms";
+    private static final String PAD_OPACITY = "pad_opacity_pct";
+    // Three-finger keys keep their original name so existing choices survive the upgrade.
+    private static final String PAD_SWIPE3_PREFIX = "pad_swipe.";
+    private static final String PAD_SWIPE2_PREFIX = "pad_swipe2.";
     private static final int CURRENT_CURSOR_SET_VERSION = 3;
+    public static final int MIN_PAD_SENSITIVITY = 50;
+    public static final int MAX_PAD_SENSITIVITY = 400;
+    public static final int MIN_PAD_TAP_DELAY_MS = 0;
+    public static final int MAX_PAD_TAP_DELAY_MS = 500;
+    /** The movable pad must stay visible so it can be found; the full-screen pad may be invisible. */
+    public static final int MIN_PAD_OPACITY_MOVABLE = 5;
+    public static final int MIN_PAD_OPACITY_FULL_SCREEN = 0;
+    public static final int MAX_PAD_OPACITY = 60;
     public static final int DEFAULT_CURSOR_SIZE_DP = 42;
     public static final int MIN_CURSOR_SIZE_DP = 24;
     public static final int MAX_CURSOR_SIZE_DP = 72;
@@ -298,6 +319,130 @@ public final class Settings {
 
     public void setCaptureMouseKeyVisible(boolean enabled) {
         prefs.edit().putBoolean(CAPTURE_MOUSE_KEY_VISIBLE, enabled).apply();
+    }
+
+    // ---- touchpad ----
+
+    public boolean padFullScreen() {
+        return prefs.getBoolean(PAD_FULL_SCREEN, false);
+    }
+
+    public void setPadFullScreen(boolean enabled) {
+        prefs.edit().putBoolean(PAD_FULL_SCREEN, enabled).apply();
+    }
+
+    /** Pad rectangle as fractions of the screen: {left, top, width, height}. */
+    public float[] padRect() {
+        float w = clampF(prefs.getFloat(PAD_WIDTH, 0.9f), 0.15f, 1f);
+        float h = clampF(prefs.getFloat(PAD_HEIGHT, 0.4f), 0.1f, 1f);
+        float l = clampF(prefs.getFloat(PAD_LEFT, 0.05f), 0f, 1f - w);
+        float t = clampF(prefs.getFloat(PAD_TOP, 0.55f), 0f, 1f - h);
+        return new float[]{l, t, w, h};
+    }
+
+    public void setPadRect(float left, float top, float width, float height) {
+        prefs.edit()
+                .putFloat(PAD_LEFT, left)
+                .putFloat(PAD_TOP, top)
+                .putFloat(PAD_WIDTH, width)
+                .putFloat(PAD_HEIGHT, height)
+                .apply();
+    }
+
+    public void resetPadRect() {
+        prefs.edit()
+                .remove(PAD_LEFT).remove(PAD_TOP).remove(PAD_WIDTH).remove(PAD_HEIGHT)
+                .apply();
+    }
+
+    public int padSensitivityPercent() {
+        return clampI(prefs.getInt(PAD_SENSITIVITY, 160), MIN_PAD_SENSITIVITY, MAX_PAD_SENSITIVITY);
+    }
+
+    public void setPadSensitivityPercent(int value) {
+        prefs.edit().putInt(PAD_SENSITIVITY, clampI(value, MIN_PAD_SENSITIVITY, MAX_PAD_SENSITIVITY)).apply();
+    }
+
+    public boolean padAcceleration() {
+        return prefs.getBoolean(PAD_ACCELERATION, true);
+    }
+
+    public void setPadAcceleration(boolean enabled) {
+        prefs.edit().putBoolean(PAD_ACCELERATION, enabled).apply();
+    }
+
+    public boolean padTapAndDrag() {
+        return prefs.getBoolean(PAD_TAP_AND_DRAG, true);
+    }
+
+    public void setPadTapAndDrag(boolean enabled) {
+        prefs.edit().putBoolean(PAD_TAP_AND_DRAG, enabled).apply();
+    }
+
+    /**
+     * How long (ms) a tap waits before it clicks, so a second touch can turn it into a hold/drag
+     * without the first tap having clicked. 0 = click immediately (no tap-then-drag).
+     */
+    public int padTapDelayMs() {
+        return clampI(prefs.getInt(PAD_TAP_DELAY, 150), MIN_PAD_TAP_DELAY_MS, MAX_PAD_TAP_DELAY_MS);
+    }
+
+    public void setPadTapDelayMs(int value) {
+        prefs.edit().putInt(PAD_TAP_DELAY, clampI(value, MIN_PAD_TAP_DELAY_MS, MAX_PAD_TAP_DELAY_MS)).apply();
+    }
+
+    /** Lowest opacity allowed for the current pad area. */
+    public int padOpacityMinPercent() {
+        return padFullScreen() ? MIN_PAD_OPACITY_FULL_SCREEN : MIN_PAD_OPACITY_MOVABLE;
+    }
+
+    /**
+     * Effective opacity for the current area. The stored value is kept as chosen (so 0% on the
+     * full-screen pad survives a trip through the movable pad) and only clamped when read.
+     */
+    public int padOpacityPercent() {
+        return clampI(prefs.getInt(PAD_OPACITY, 20), padOpacityMinPercent(), MAX_PAD_OPACITY);
+    }
+
+    public void setPadOpacityPercent(int value) {
+        prefs.edit().putInt(PAD_OPACITY, clampI(value, MIN_PAD_OPACITY_FULL_SCREEN, MAX_PAD_OPACITY)).apply();
+    }
+
+    /** Three-finger swipes do nothing until the user assigns an action; two-finger have defaults. */
+    public static PadAction defaultSwipeAction(int fingers, SwipeDirection direction) {
+        if (fingers != 2) return PadAction.NONE;
+        switch (direction) {
+            case UP: return PadAction.HOME;
+            case DOWN: return PadAction.NOTIFICATIONS;
+            case LEFT: return PadAction.BACK;
+            case RIGHT: return PadAction.RECENTS;
+            default: return PadAction.NONE;
+        }
+    }
+
+    private static String swipeKey(int fingers, SwipeDirection direction) {
+        return (fingers == 2 ? PAD_SWIPE2_PREFIX : PAD_SWIPE3_PREFIX) + direction.name();
+    }
+
+    /** @param fingers 2 or 3 */
+    public PadAction padSwipeAction(int fingers, SwipeDirection direction) {
+        PadAction stored = PadAction.fromName(
+                prefs.getString(swipeKey(fingers, direction), null),
+                defaultSwipeAction(fingers, direction));
+        return stored.isAvailable() ? stored : PadAction.NONE;
+    }
+
+    /** @param fingers 2 or 3 */
+    public void setPadSwipeAction(int fingers, SwipeDirection direction, PadAction action) {
+        prefs.edit().putString(swipeKey(fingers, direction), action.name()).apply();
+    }
+
+    private static int clampI(int v, int min, int max) {
+        return Math.max(min, Math.min(max, v));
+    }
+
+    private static float clampF(float v, float min, float max) {
+        return Math.max(min, Math.min(max, v));
     }
 
     public boolean wrapEdges() {

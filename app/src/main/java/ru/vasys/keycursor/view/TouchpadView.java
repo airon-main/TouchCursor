@@ -127,6 +127,11 @@ public final class TouchpadView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        // Ignore events that are not from a physical touch device
+        if ((e.getSource() & android.view.InputDevice.SOURCE_TOUCHSCREEN) == 0) {
+            return false;
+        }
+
         final int action = e.getActionMasked();
 
         if (chromeMode != CHROME_NONE) {

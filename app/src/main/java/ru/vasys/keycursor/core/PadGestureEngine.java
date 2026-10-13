@@ -26,11 +26,11 @@ public final class PadGestureEngine {
         void onMove(float dx, float dy);
 
         void onClick();
-
+        
         void onDragStart();
-
+        
         void onDragEnd();
-
+        
         /** A two- or three-finger swipe; {@code fingers} is 2 or 3. */
         void onSwipe(int fingers, SwipeDirection direction);
     }
@@ -43,8 +43,8 @@ public final class PadGestureEngine {
     }
 
     private enum State { IDLE, ONE, HOLD_PENDING, DRAG, MULTI, DONE }
-
-    private enum Timed { NONE, TAP_COMMIT, HOLD_CONFIRM, SECOND_CLICK }
+    
+    private enum Timed { NONE, TAP_COMMIT, HOLD_CONFIRM }
 
     // ---- configuration (set by the owner; plain fields on purpose) ----
     public float sensitivity = 1.6f;
@@ -95,11 +95,7 @@ public final class PadGestureEngine {
         if (state != State.IDLE) onCancel();
 
         boolean chained = false;
-        if (timed == Timed.SECOND_CLICK) {
-            // Second half of a double tap is still waiting; do not lose it.
-            cancelTimer();
-            listener.onClick();
-        } else if (timed == Timed.TAP_COMMIT) {
+        if (timed == Timed.TAP_COMMIT) {
             if (delayedTaps() && t - tapUpTime <= tapDelayMs) {
                 chained = true;
             } else {
@@ -153,14 +149,20 @@ public final class PadGestureEngine {
                 if (count <= 1) {
                     state = State.DONE;
                 } else if (Math.min(3, count) != fingers) {
-                    // Re-baseline so adding/removing a finger cannot register as travel.
-                    fingers = Math.min(3, count);
-                    swipeStartX = cx;
-                    swipeStartY = cy;
+                    // Only re-baseline if the centroid has shifted significantly
+                    // to avoid cancelling a swipe during a finger transition.
+                    float ddx = cx - swipeStartX;
+                    float ddy = cy - swipeStartY;
+                    if ((ddx * ddx + ddy * ddy) > (touchSlopPx * touchSlopPx)) {
+                        fingers = Math.min(3, count);
+                        swipeStartX = cx;
+                        swipeStartY = cy;
+                    } else {
+                        fingers = Math.min(3, count);
+                    }
                 }
                 break;
             default:
-                // DRAG ignores extra fingers; DONE stays inert until everything lifts.
                 break;
         }
     }
@@ -174,11 +176,10 @@ public final class PadGestureEngine {
             case HOLD_PENDING: {
                 float ddx = px - downX;
                 float ddy = py - downY;
-                if ((float) Math.sqrt(ddx * ddx + ddy * ddy) < touchSlopPx) {
+                if ((ddx * ddx + ddy * ddy) < (touchSlopPx * touchSlopPx)) {
                     lastMoveTime = t;
                     break;
                 }
-                // Moving after the second touch: this is a drag, and the first tap never clicks.
                 cancelTimer();
                 tapPending = false;
                 state = State.DRAG;
@@ -215,25 +216,23 @@ public final class PadGestureEngine {
                 cancelTimer();
                 tapPending = false;
                 if (t - downTime > tapTimeoutMs) {
-                    // Held (the hold timer was late): a press and release at the cursor.
                     listener.onDragStart();
                     listener.onDragEnd();
                 } else {
-                    // Quick second tap: a double tap, i.e. two separate clicks.
                     listener.onClick();
-                    arm(Timed.SECOND_CLICK, doubleClickGapMs);
                 }
                 break;
             }
             case DRAG:
                 listener.onDragEnd();
                 break;
+            case DONE:
+                break;
             default:
                 break;
         }
     }
 
-    /** Touch stream was cancelled (e.g. the system took over, or the pad was hidden). */
     public void onCancel() {
         if (state == State.DRAG) listener.onDragEnd();
         cancelTimer();
@@ -241,7 +240,6 @@ public final class PadGestureEngine {
         state = State.IDLE;
     }
 
-    /** Called by the host when the {@link Timer} fires. */
     public void onTimer() {
         Timed kind = timed;
         timed = Timed.NONE;
@@ -259,9 +257,6 @@ public final class PadGestureEngine {
                     listener.onDragStart();
                 }
                 break;
-            case SECOND_CLICK:
-                listener.onClick();
-                break;
             default:
                 break;
         }
@@ -270,8 +265,6 @@ public final class PadGestureEngine {
     public boolean isIdle() {
         return state == State.IDLE;
     }
-
-    // ------------------------------------------------------------------------------------------
 
     private boolean delayedTaps() {
         return tapAndDrag && tapDelayMs > 0 && timer != null;
@@ -287,7 +280,6 @@ public final class PadGestureEngine {
         if (timer != null) timer.cancel();
     }
 
-    /** Drops a tap that is still waiting for its delay (the next touch was not a click/drag). */
     private void discardPendingTap() {
         if (timed == Timed.HOLD_CONFIRM) cancelTimer();
         tapPending = false;
@@ -297,7 +289,7 @@ public final class PadGestureEngine {
         if (!slopExceeded) {
             float ddx = px - downX;
             float ddy = py - downY;
-            if ((float) Math.sqrt(ddx * ddx + ddy * ddy) < touchSlopPx) {
+            if ((ddx * ddx + ddy * ddy) < (touchSlopPx * touchSlopPx)) {
                 lastMoveTime = t;
                 return;
             }
@@ -309,7 +301,7 @@ public final class PadGestureEngine {
         long dt = Math.max(1, Math.min(64, t - lastMoveTime));
         float gain = sensitivity;
         if (acceleration && !firstMoveAfterSlop) {
-            float speed = (float) Math.sqrt(dx * dx + dy * dy) / dt; // px per ms
+            float speed = (float) Math.sqrt(dx * dx + dy * dy) / dt;
             gain *= 1f + 1.5f * Math.min(speed / 1.5f, 1f);
         }
         firstMoveAfterSlop = false;

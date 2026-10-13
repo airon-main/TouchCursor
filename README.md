@@ -1,8 +1,10 @@
-# KeyCursor
+# TouchCursor (KeyCursor Fork)
 
 Hardware-key mouse and touch cursor for Android 8+.
 
 KeyCursor turns hardware keys into a real touch cursor with movement, click-and-hold, drag, a persistent Hold mode and real Accessibility scroll actions. The cursor is hidden until you hold the configured **Mouse key**.
+
+This fork adds touchpad functionality, enabling the screen to act as a virtual trackpad for cursor movement and gesture-based control. The cursor is hidden until you press the Quick Settings tile or the button inside the app.
 
 ## Features
 
@@ -31,6 +33,8 @@ Package: `ru.vasys.keycursor`
 Minimum Android: 8.0 / API 26
 
 Tested on **Fujitsu F-03L** (Android 8.1).
+
+Fork is tested on **Xiaomi 11t Pro** (Android 16)
 
 ## Setup
 
